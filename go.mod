@@ -3,7 +3,7 @@ module github.com/bsv-blockchain/go-chaintracks
 go 1.25.4
 
 require (
-	github.com/bsv-blockchain/go-p2p-message-bus v0.1.3
+	github.com/bsv-blockchain/go-p2p-message-bus v0.1.6
 	github.com/bsv-blockchain/go-sdk v1.2.12
 	github.com/gofiber/fiber/v2 v2.52.10
 	github.com/joho/godotenv v1.6.0-pre.2
