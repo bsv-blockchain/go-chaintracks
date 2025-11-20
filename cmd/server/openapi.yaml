@@ -1,0 +1,298 @@
+openapi: 3.0.3
+info:
+  title: Chaintracks Server API
+  description: REST API for querying Bitcoin SV blockchain headers
+  version: 2.0.0
+servers:
+  - url: /
+paths:
+  /v2/network:
+    get:
+      summary: Get blockchain network
+      description: Returns the network name (main or test)
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      value:
+                        type: string
+
+  /v2/height:
+    get:
+      summary: Get current blockchain height
+      description: Returns the current height of the blockchain
+      responses:
+        '200':
+          description: Successful response
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Cache control header (max-age=60)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      value:
+                        type: integer
+                        format: uint32
+
+  /v2/tip/hash:
+    get:
+      summary: Get chain tip hash
+      description: Returns the hash of the current chain tip
+      responses:
+        '200':
+          description: Successful response
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Cache control header (no-cache)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      value:
+                        type: string
+        '404':
+          description: Chain tip not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/tip/header:
+    get:
+      summary: Get chain tip header
+      description: Returns the full header of the current chain tip
+      responses:
+        '200':
+          description: Successful response
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Cache control header (no-cache)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      value:
+                        $ref: '#/components/schemas/BlockHeader'
+        '404':
+          description: Chain tip not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/header/height/{height}:
+    get:
+      summary: Get header by height
+      description: Returns a block header for a specific height
+      parameters:
+        - name: height
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint32
+          description: Block height
+      responses:
+        '200':
+          description: Successful response (null if not found)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Cache control header (varies based on height)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      value:
+                        oneOf:
+                          - $ref: '#/components/schemas/BlockHeader'
+                          - type: 'null'
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/header/hash/{hash}:
+    get:
+      summary: Get header by hash
+      description: Returns a block header for a specific block hash
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Block hash (hex string)
+      responses:
+        '200':
+          description: Successful response (null if not found)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Cache control header (varies based on height)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      value:
+                        oneOf:
+                          - $ref: '#/components/schemas/BlockHeader'
+                          - type: 'null'
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/headers:
+    get:
+      summary: Get multiple headers
+      description: Returns multiple block headers concatenated as hex string
+      parameters:
+        - name: height
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: uint32
+          description: Starting block height
+        - name: count
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: uint32
+          description: Number of headers to retrieve
+      responses:
+        '200':
+          description: Successful response
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Cache control header (varies based on height)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      value:
+                        type: string
+                        description: Concatenated block headers as hex string (80 bytes per header)
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Serialization error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    SuccessResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [success]
+        value:
+          description: Response payload (varies by endpoint)
+
+    ErrorResponse:
+      type: object
+      required:
+        - status
+        - code
+        - description
+      properties:
+        status:
+          type: string
+          enum: [error]
+        code:
+          type: string
+        description:
+          type: string
+
+    BlockHeader:
+      type: object
+      required:
+        - version
+        - previousHash
+        - merkleRoot
+        - time
+        - bits
+        - nonce
+        - height
+        - hash
+      properties:
+        version:
+          type: integer
+          format: int32
+          description: Block version
+        previousHash:
+          type: string
+          description: Previous block hash
+        merkleRoot:
+          type: string
+          description: Merkle root hash
+        time:
+          type: integer
+          format: uint32
+          description: Block timestamp (Unix time)
+        bits:
+          type: integer
+          format: uint32
+          description: Difficulty target
+        nonce:
+          type: integer
+          format: uint32
+          description: Nonce
+        height:
+          type: integer
+          format: uint32
+          description: Block height in the chain
+        hash:
+          type: string
+          description: Block hash
