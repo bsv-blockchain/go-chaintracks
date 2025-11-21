@@ -12,133 +12,47 @@ import (
 func TestLoadConfig(t *testing.T) {
 	tests := []struct {
 		name           string
-		setupEnv       func() func()
+		envVars        map[string]string
 		expectedPort   int
 		expectedNet    string
 		expectedPath   string
 		expectedBootst string
 	}{
 		{
-			name: "LoadsDefaultValues",
-			setupEnv: func() func() {
-				// Clear all environment variables
-				oldPort := os.Getenv("PORT")
-				oldChain := os.Getenv("CHAIN")
-				oldStorage := os.Getenv("STORAGE_PATH")
-				oldBootstrap := os.Getenv("BOOTSTRAP_URL")
-
-				_ = os.Unsetenv("PORT")
-				_ = os.Unsetenv("CHAIN")
-				_ = os.Unsetenv("STORAGE_PATH")
-				_ = os.Unsetenv("BOOTSTRAP_URL")
-
-				return func() {
-					_ = os.Setenv("PORT", oldPort)
-					_ = os.Setenv("CHAIN", oldChain)
-					_ = os.Setenv("STORAGE_PATH", oldStorage)
-					_ = os.Setenv("BOOTSTRAP_URL", oldBootstrap)
-				}
-			},
+			name:           "LoadsDefaultValues",
+			envVars:        nil,
 			expectedPort:   3011,
 			expectedNet:    "main",
 			expectedPath:   getDefaultStoragePath(),
 			expectedBootst: "",
 		},
 		{
-			name: "LoadsPortFromEnvironment",
-			setupEnv: func() func() {
-				oldPort := os.Getenv("PORT")
-				oldChain := os.Getenv("CHAIN")
-				oldStorage := os.Getenv("STORAGE_PATH")
-				oldBootstrap := os.Getenv("BOOTSTRAP_URL")
-
-				_ = os.Setenv("PORT", "8080")
-				_ = os.Unsetenv("CHAIN")
-				_ = os.Unsetenv("STORAGE_PATH")
-				_ = os.Unsetenv("BOOTSTRAP_URL")
-
-				return func() {
-					_ = os.Setenv("PORT", oldPort)
-					_ = os.Setenv("CHAIN", oldChain)
-					_ = os.Setenv("STORAGE_PATH", oldStorage)
-					_ = os.Setenv("BOOTSTRAP_URL", oldBootstrap)
-				}
-			},
+			name:           "LoadsPortFromEnvironment",
+			envVars:        map[string]string{"PORT": "8080"},
 			expectedPort:   8080,
 			expectedNet:    "main",
 			expectedPath:   getDefaultStoragePath(),
 			expectedBootst: "",
 		},
 		{
-			name: "LoadsNetworkFromEnvironment",
-			setupEnv: func() func() {
-				oldPort := os.Getenv("PORT")
-				oldChain := os.Getenv("CHAIN")
-				oldStorage := os.Getenv("STORAGE_PATH")
-				oldBootstrap := os.Getenv("BOOTSTRAP_URL")
-
-				_ = os.Unsetenv("PORT")
-				_ = os.Setenv("CHAIN", "testnet")
-				_ = os.Unsetenv("STORAGE_PATH")
-				_ = os.Unsetenv("BOOTSTRAP_URL")
-
-				return func() {
-					_ = os.Setenv("PORT", oldPort)
-					_ = os.Setenv("CHAIN", oldChain)
-					_ = os.Setenv("STORAGE_PATH", oldStorage)
-					_ = os.Setenv("BOOTSTRAP_URL", oldBootstrap)
-				}
-			},
+			name:           "LoadsNetworkFromEnvironment",
+			envVars:        map[string]string{"CHAIN": "testnet"},
 			expectedPort:   3011,
 			expectedNet:    "testnet",
 			expectedPath:   getDefaultStoragePath(),
 			expectedBootst: "",
 		},
 		{
-			name: "LoadsStoragePathFromEnvironment",
-			setupEnv: func() func() {
-				oldPort := os.Getenv("PORT")
-				oldChain := os.Getenv("CHAIN")
-				oldStorage := os.Getenv("STORAGE_PATH")
-				oldBootstrap := os.Getenv("BOOTSTRAP_URL")
-
-				_ = os.Unsetenv("PORT")
-				_ = os.Unsetenv("CHAIN")
-				_ = os.Setenv("STORAGE_PATH", "/custom/path")
-				_ = os.Unsetenv("BOOTSTRAP_URL")
-
-				return func() {
-					_ = os.Setenv("PORT", oldPort)
-					_ = os.Setenv("CHAIN", oldChain)
-					_ = os.Setenv("STORAGE_PATH", oldStorage)
-					_ = os.Setenv("BOOTSTRAP_URL", oldBootstrap)
-				}
-			},
+			name:           "LoadsStoragePathFromEnvironment",
+			envVars:        map[string]string{"STORAGE_PATH": "/custom/path"},
 			expectedPort:   3011,
 			expectedNet:    "main",
 			expectedPath:   "/custom/path",
 			expectedBootst: "",
 		},
 		{
-			name: "LoadsBootstrapURLFromEnvironment",
-			setupEnv: func() func() {
-				oldPort := os.Getenv("PORT")
-				oldChain := os.Getenv("CHAIN")
-				oldStorage := os.Getenv("STORAGE_PATH")
-				oldBootstrap := os.Getenv("BOOTSTRAP_URL")
-
-				_ = os.Unsetenv("PORT")
-				_ = os.Unsetenv("CHAIN")
-				_ = os.Unsetenv("STORAGE_PATH")
-				_ = os.Setenv("BOOTSTRAP_URL", "http://example.com")
-
-				return func() {
-					_ = os.Setenv("PORT", oldPort)
-					_ = os.Setenv("CHAIN", oldChain)
-					_ = os.Setenv("STORAGE_PATH", oldStorage)
-					_ = os.Setenv("BOOTSTRAP_URL", oldBootstrap)
-				}
-			},
+			name:           "LoadsBootstrapURLFromEnvironment",
+			envVars:        map[string]string{"BOOTSTRAP_URL": "http://example.com"},
 			expectedPort:   3011,
 			expectedNet:    "main",
 			expectedPath:   getDefaultStoragePath(),
@@ -146,23 +60,11 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name: "LoadsAllValuesFromEnvironment",
-			setupEnv: func() func() {
-				oldPort := os.Getenv("PORT")
-				oldChain := os.Getenv("CHAIN")
-				oldStorage := os.Getenv("STORAGE_PATH")
-				oldBootstrap := os.Getenv("BOOTSTRAP_URL")
-
-				_ = os.Setenv("PORT", "9999")
-				_ = os.Setenv("CHAIN", "regtest")
-				_ = os.Setenv("STORAGE_PATH", "/full/custom/path")
-				_ = os.Setenv("BOOTSTRAP_URL", "http://bootstrap.example.com")
-
-				return func() {
-					_ = os.Setenv("PORT", oldPort)
-					_ = os.Setenv("CHAIN", oldChain)
-					_ = os.Setenv("STORAGE_PATH", oldStorage)
-					_ = os.Setenv("BOOTSTRAP_URL", oldBootstrap)
-				}
+			envVars: map[string]string{
+				"PORT":          "9999",
+				"CHAIN":         "regtest",
+				"STORAGE_PATH":  "/full/custom/path",
+				"BOOTSTRAP_URL": "http://bootstrap.example.com",
 			},
 			expectedPort:   9999,
 			expectedNet:    "regtest",
@@ -170,50 +72,16 @@ func TestLoadConfig(t *testing.T) {
 			expectedBootst: "http://bootstrap.example.com",
 		},
 		{
-			name: "UsesDefaultPortWhenPortIsInvalid",
-			setupEnv: func() func() {
-				oldPort := os.Getenv("PORT")
-				oldChain := os.Getenv("CHAIN")
-				oldStorage := os.Getenv("STORAGE_PATH")
-				oldBootstrap := os.Getenv("BOOTSTRAP_URL")
-
-				_ = os.Setenv("PORT", "invalid")
-				_ = os.Unsetenv("CHAIN")
-				_ = os.Unsetenv("STORAGE_PATH")
-				_ = os.Unsetenv("BOOTSTRAP_URL")
-
-				return func() {
-					_ = os.Setenv("PORT", oldPort)
-					_ = os.Setenv("CHAIN", oldChain)
-					_ = os.Setenv("STORAGE_PATH", oldStorage)
-					_ = os.Setenv("BOOTSTRAP_URL", oldBootstrap)
-				}
-			},
+			name:           "UsesDefaultPortWhenPortIsInvalid",
+			envVars:        map[string]string{"PORT": "invalid"},
 			expectedPort:   3011,
 			expectedNet:    "main",
 			expectedPath:   getDefaultStoragePath(),
 			expectedBootst: "",
 		},
 		{
-			name: "UsesDefaultPortWhenPortIsEmpty",
-			setupEnv: func() func() {
-				oldPort := os.Getenv("PORT")
-				oldChain := os.Getenv("CHAIN")
-				oldStorage := os.Getenv("STORAGE_PATH")
-				oldBootstrap := os.Getenv("BOOTSTRAP_URL")
-
-				_ = os.Setenv("PORT", "")
-				_ = os.Unsetenv("CHAIN")
-				_ = os.Unsetenv("STORAGE_PATH")
-				_ = os.Unsetenv("BOOTSTRAP_URL")
-
-				return func() {
-					_ = os.Setenv("PORT", oldPort)
-					_ = os.Setenv("CHAIN", oldChain)
-					_ = os.Setenv("STORAGE_PATH", oldStorage)
-					_ = os.Setenv("BOOTSTRAP_URL", oldBootstrap)
-				}
-			},
+			name:           "UsesDefaultPortWhenPortIsEmpty",
+			envVars:        map[string]string{"PORT": ""},
 			expectedPort:   3011,
 			expectedNet:    "main",
 			expectedPath:   getDefaultStoragePath(),
@@ -223,7 +91,7 @@ func TestLoadConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cleanup := tt.setupEnv()
+			cleanup := withEnvVars(t, tt.envVars)
 			defer cleanup()
 
 			config := LoadConfig()
