@@ -390,3 +390,114 @@ func TestHandleGetHeaders_MissingParams(t *testing.T) {
 		t.Errorf("Expected status 'error', got '%s'", response.Status)
 	}
 }
+
+func TestHandleRobots(t *testing.T) {
+	app, _ := setupTestApp(t)
+
+	req := httptest.NewRequest("GET", "/robots.txt", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to make request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "text/plain" {
+		t.Errorf("Expected Content-Type 'text/plain', got '%s'", contentType)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	expected := "User-agent: *\nDisallow: /\n"
+	if string(body) != expected {
+		t.Errorf("Expected robots.txt content '%s', got '%s'", expected, string(body))
+	}
+}
+
+func TestHandleOpenAPISpec(t *testing.T) {
+	app, _ := setupTestApp(t)
+
+	req := httptest.NewRequest("GET", "/openapi.yaml", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to make request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "application/yaml" {
+		t.Errorf("Expected Content-Type 'application/yaml', got '%s'", contentType)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if len(body) == 0 {
+		t.Error("Expected non-empty OpenAPI spec")
+	}
+
+	// Check that it starts with openapi version
+	bodyStr := string(body)
+	if len(bodyStr) < 10 || bodyStr[0:8] != "openapi:" {
+		t.Error("Expected OpenAPI spec to start with 'openapi:'")
+	}
+}
+
+func TestHandleSwaggerUI(t *testing.T) {
+	app, _ := setupTestApp(t)
+
+	req := httptest.NewRequest("GET", "/docs", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to make request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "text/html" {
+		t.Errorf("Expected Content-Type 'text/html', got '%s'", contentType)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	// Check for key Swagger UI elements
+	if !containsString(bodyStr, "<!DOCTYPE html>") {
+		t.Error("Expected HTML doctype in Swagger UI")
+	}
+
+	if !containsString(bodyStr, "swagger-ui") {
+		t.Error("Expected 'swagger-ui' in Swagger UI HTML")
+	}
+
+	if !containsString(bodyStr, "Chaintracks API Documentation") {
+		t.Error("Expected 'Chaintracks API Documentation' title in Swagger UI")
+	}
+
+	if !containsString(bodyStr, "/openapi.yaml") {
+		t.Error("Expected reference to '/openapi.yaml' in Swagger UI")
+	}
+}
+
+// Helper function for string contains check
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsSubstring(s, substr))
+}
+
+func containsSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

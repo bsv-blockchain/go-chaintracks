@@ -476,3 +476,285 @@ func TestChainManagerAddHeader(t *testing.T) {
 		})
 	}
 }
+
+func TestChainManagerPruneOrphans(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupCM    func() *ChainManager
+		verifyFunc func(t *testing.T, cm *ChainManager)
+	}{
+		{
+			name: "NilTipReturnsEarly",
+			setupCM: func() *ChainManager {
+				return &ChainManager{
+					tip:      nil,
+					byHash:   make(map[chainhash.Hash]*BlockHeader),
+					byHeight: []chainhash.Hash{},
+				}
+			},
+			verifyFunc: func(t *testing.T, cm *ChainManager) {
+				t.Helper()
+				// Should not panic or error
+				// byHash should remain empty
+				assert.Empty(t, cm.byHash)
+			},
+		},
+		{
+			name: "TipHeightLessThan100NoPruning",
+			setupCM: func() *ChainManager {
+				cm := &ChainManager{
+					byHash:   make(map[chainhash.Hash]*BlockHeader),
+					byHeight: make([]chainhash.Hash, 51),
+				}
+
+				// Create tip at height 50
+				tipHash := chainhash.Hash{0x01}
+				tip := &BlockHeader{
+					Header: &block.Header{},
+					Height: 50,
+					Hash:   tipHash,
+				}
+				cm.tip = tip
+				cm.byHash[tipHash] = tip
+				cm.byHeight[50] = tipHash
+
+				// Create an orphan at height 10 (should NOT be pruned)
+				orphanHash := chainhash.Hash{0x02}
+				orphan := &BlockHeader{
+					Header: &block.Header{},
+					Height: 10,
+					Hash:   orphanHash,
+				}
+				cm.byHash[orphanHash] = orphan
+
+				return cm
+			},
+			verifyFunc: func(t *testing.T, cm *ChainManager) {
+				t.Helper()
+				// Orphan should still exist (no pruning when tip < 100)
+				_, exists := cm.byHash[chainhash.Hash{0x02}]
+				assert.True(t, exists, "Orphan should not be pruned when tip height < 100")
+				assert.Len(t, cm.byHash, 2, "Should have 2 headers (tip + orphan)")
+			},
+		},
+		{
+			name: "PrunesOldOrphansAboveHeight100",
+			setupCM: func() *ChainManager {
+				cm := &ChainManager{
+					byHash:   make(map[chainhash.Hash]*BlockHeader),
+					byHeight: make([]chainhash.Hash, 201),
+				}
+
+				// Create tip at height 200
+				tipHash := chainhash.Hash{0x01}
+				tip := &BlockHeader{
+					Header: &block.Header{},
+					Height: 200,
+					Hash:   tipHash,
+				}
+				cm.tip = tip
+				cm.byHash[tipHash] = tip
+				cm.byHeight[200] = tipHash
+
+				// Create old orphan at height 50 (should be pruned, 200-100=100)
+				oldOrphanHash := chainhash.Hash{0x02}
+				oldOrphan := &BlockHeader{
+					Header: &block.Header{},
+					Height: 50,
+					Hash:   oldOrphanHash,
+				}
+				cm.byHash[oldOrphanHash] = oldOrphan
+
+				// Create recent orphan at height 150 (should NOT be pruned)
+				recentOrphanHash := chainhash.Hash{0x03}
+				recentOrphan := &BlockHeader{
+					Header: &block.Header{},
+					Height: 150,
+					Hash:   recentOrphanHash,
+				}
+				cm.byHash[recentOrphanHash] = recentOrphan
+
+				return cm
+			},
+			verifyFunc: func(t *testing.T, cm *ChainManager) {
+				t.Helper()
+				// Old orphan should be pruned
+				_, oldExists := cm.byHash[chainhash.Hash{0x02}]
+				assert.False(t, oldExists, "Old orphan (height 50) should be pruned")
+
+				// Recent orphan should still exist
+				_, recentExists := cm.byHash[chainhash.Hash{0x03}]
+				assert.True(t, recentExists, "Recent orphan (height 150) should not be pruned")
+
+				// Tip should still exist
+				_, tipExists := cm.byHash[chainhash.Hash{0x01}]
+				assert.True(t, tipExists, "Tip should not be pruned")
+
+				assert.Len(t, cm.byHash, 2, "Should have 2 headers (tip + recent orphan)")
+			},
+		},
+		{
+			name: "PreservesMainChainHeaders",
+			setupCM: func() *ChainManager {
+				cm := &ChainManager{
+					byHash:   make(map[chainhash.Hash]*BlockHeader),
+					byHeight: make([]chainhash.Hash, 201),
+				}
+
+				// Create tip at height 200
+				tipHash := chainhash.Hash{0x01}
+				tip := &BlockHeader{
+					Header: &block.Header{},
+					Height: 200,
+					Hash:   tipHash,
+				}
+				cm.tip = tip
+				cm.byHash[tipHash] = tip
+				cm.byHeight[200] = tipHash
+
+				// Create main chain header at height 50 (should NOT be pruned)
+				mainChainHash := chainhash.Hash{0x02}
+				mainChain := &BlockHeader{
+					Header: &block.Header{},
+					Height: 50,
+					Hash:   mainChainHash,
+				}
+				cm.byHash[mainChainHash] = mainChain
+				cm.byHeight[50] = mainChainHash
+
+				// Create orphan at height 50 with different hash (should be pruned)
+				orphanHash := chainhash.Hash{0x03}
+				orphan := &BlockHeader{
+					Header: &block.Header{},
+					Height: 50,
+					Hash:   orphanHash,
+				}
+				cm.byHash[orphanHash] = orphan
+
+				return cm
+			},
+			verifyFunc: func(t *testing.T, cm *ChainManager) {
+				t.Helper()
+				// Main chain header should be preserved
+				_, mainExists := cm.byHash[chainhash.Hash{0x02}]
+				assert.True(t, mainExists, "Main chain header should be preserved")
+
+				// Orphan should be pruned
+				_, orphanExists := cm.byHash[chainhash.Hash{0x03}]
+				assert.False(t, orphanExists, "Orphan should be pruned")
+
+				assert.Len(t, cm.byHash, 2, "Should have 2 headers (tip + main chain header)")
+			},
+		},
+		{
+			name: "HandlesIntegerOverflowProtection",
+			setupCM: func() *ChainManager {
+				cm := &ChainManager{
+					byHash:   make(map[chainhash.Hash]*BlockHeader),
+					byHeight: make([]chainhash.Hash, 0),
+				}
+
+				// Create tip at height 200
+				tipHash := chainhash.Hash{0x01}
+				tip := &BlockHeader{
+					Header: &block.Header{},
+					Height: 200,
+					Hash:   tipHash,
+				}
+				cm.tip = tip
+				cm.byHash[tipHash] = tip
+
+				// Create orphan that would trigger overflow check
+				// chainLen (0) <= 0xFFFFFFFF is true, but header.Height (50) < uint32(chainLen) (0) is false
+				orphanHash := chainhash.Hash{0x02}
+				orphan := &BlockHeader{
+					Header: &block.Header{},
+					Height: 50,
+					Hash:   orphanHash,
+				}
+				cm.byHash[orphanHash] = orphan
+
+				return cm
+			},
+			verifyFunc: func(t *testing.T, cm *ChainManager) {
+				t.Helper()
+				// Orphan should be pruned (height 50 < pruneHeight 100)
+				_, exists := cm.byHash[chainhash.Hash{0x02}]
+				assert.False(t, exists, "Orphan should be pruned")
+				assert.Len(t, cm.byHash, 1, "Should have 1 header (tip only)")
+			},
+		},
+		{
+			name: "PrunesMultipleOldOrphans",
+			setupCM: func() *ChainManager {
+				cm := &ChainManager{
+					byHash:   make(map[chainhash.Hash]*BlockHeader),
+					byHeight: make([]chainhash.Hash, 301),
+				}
+
+				// Create tip at height 300
+				tipHash := chainhash.Hash{0x01, 0x00}
+				tip := &BlockHeader{
+					Header: &block.Header{},
+					Height: 300,
+					Hash:   tipHash,
+				}
+				cm.tip = tip
+				cm.byHash[tipHash] = tip
+				cm.byHeight[300] = tipHash
+
+				// Create multiple old orphans (all should be pruned)
+				// Use two bytes to avoid collision
+				for i := uint32(50); i < 100; i++ {
+					hash := chainhash.Hash{0x02, byte(i)}
+					orphan := &BlockHeader{
+						Header: &block.Header{},
+						Height: i,
+						Hash:   hash,
+					}
+					cm.byHash[hash] = orphan
+				}
+
+				// Create multiple recent orphans (none should be pruned)
+				for i := uint32(250); i < 260; i++ {
+					hash := chainhash.Hash{0x03, byte(i)}
+					orphan := &BlockHeader{
+						Header: &block.Header{},
+						Height: i,
+						Hash:   hash,
+					}
+					cm.byHash[hash] = orphan
+				}
+
+				return cm
+			},
+			verifyFunc: func(t *testing.T, cm *ChainManager) {
+				t.Helper()
+				// Should have tip + 10 recent orphans = 11
+				assert.Len(t, cm.byHash, 11, "Should have 11 headers (tip + 10 recent orphans)")
+
+				// Verify old orphans are gone
+				for i := uint32(50); i < 100; i++ {
+					hash := chainhash.Hash{0x02, byte(i)}
+					_, exists := cm.byHash[hash]
+					assert.False(t, exists, "Old orphan at height %d should be pruned", i)
+				}
+
+				// Verify recent orphans remain
+				for i := uint32(250); i < 260; i++ {
+					hash := chainhash.Hash{0x03, byte(i)}
+					_, exists := cm.byHash[hash]
+					assert.True(t, exists, "Recent orphan at height %d should be preserved", i)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm := tt.setupCM()
+			cm.pruneOrphans()
+			tt.verifyFunc(t, cm)
+		})
+	}
+}
