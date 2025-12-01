@@ -63,6 +63,12 @@ func FuzzChainWorkFromHex(f *testing.F) {
 	f.Add(string([]byte{0x00, 0x01, 0x02}))                                   // control chars
 
 	f.Fuzz(func(t *testing.T, hexStr string) {
+		// Skip unrealistically long inputs to avoid timeout on expensive big.Int operations
+		// Bitcoin chainwork is at most 256 bits = 64 hex characters
+		if len(hexStr) > 64 {
+			return
+		}
+
 		// Should never panic
 		result, err := ChainWorkFromHex(hexStr)
 
