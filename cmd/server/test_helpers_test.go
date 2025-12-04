@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -64,7 +63,7 @@ func withEnvVars(t *testing.T, vars map[string]string) func() {
 func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
 	t.Helper()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create temp directory and copy checkpoint files
 	tempDir := t.TempDir()

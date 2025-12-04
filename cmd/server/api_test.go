@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -24,7 +23,7 @@ func TestHandleGetNetwork(t *testing.T) {
 
 func TestHandleGetHeight(t *testing.T) {
 	app, cm := setupTestApp(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	resp := httpGet(t, app, "/v2/height")
 	requireStatus(t, resp, 200)
@@ -42,7 +41,7 @@ func TestHandleGetHeight(t *testing.T) {
 
 func TestHandleGetTipHash(t *testing.T) {
 	app, cm := setupTestApp(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	resp := httpGet(t, app, "/v2/tip/hash")
 	requireStatus(t, resp, 200)
@@ -60,7 +59,7 @@ func TestHandleGetTipHash(t *testing.T) {
 
 func TestHandleGetTipHeader(t *testing.T) {
 	app, cm := setupTestApp(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	resp := httpGet(t, app, "/v2/tip/header")
 	requireStatus(t, resp, 200)
@@ -77,7 +76,7 @@ func TestHandleGetTipHeader(t *testing.T) {
 
 func TestHandleGetHeaderByHeight(t *testing.T) {
 	app, cm := setupTestApp(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if cm.GetHeight(ctx) < 100 {
 		t.Skip("Not enough headers to test")
@@ -114,7 +113,7 @@ func TestHandleGetHeaderByHeight_NotFound(t *testing.T) {
 
 func TestHandleGetHeaderByHash(t *testing.T) {
 	app, cm := setupTestApp(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tip := cm.GetTip(ctx)
 	hash := tip.Header.Hash().String()
@@ -159,7 +158,7 @@ func TestHandleGetHeaderByHash_NotFound(t *testing.T) {
 
 func TestHandleGetHeaders(t *testing.T) {
 	app, cm := setupTestApp(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if cm.GetHeight(ctx) < 10 {
 		t.Skip("Not enough headers to test")

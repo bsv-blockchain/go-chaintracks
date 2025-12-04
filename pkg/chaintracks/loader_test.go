@@ -1,7 +1,6 @@
 package chaintracks
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -214,7 +213,7 @@ func TestLoadFromLocalFiles(t *testing.T) {
 		t.Skipf("Test CDN data not found at %s", testCDNPath)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Load or generate private key for P2P
 	privKey, err := LoadOrGeneratePrivateKey(testCDNPath)

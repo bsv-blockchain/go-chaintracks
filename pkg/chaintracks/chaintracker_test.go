@@ -1,7 +1,6 @@
 package chaintracks
 
 import (
-	"context"
 	"testing"
 
 	"github.com/bsv-blockchain/go-sdk/block"
@@ -169,9 +168,8 @@ func TestChainManagerIsValidRootForHeight(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.setupCM()
-			ctx := context.Background()
 
-			valid, err := cm.IsValidRootForHeight(ctx, tt.root, tt.height)
+			valid, err := cm.IsValidRootForHeight(t.Context(), tt.root, tt.height)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
@@ -259,9 +257,8 @@ func TestChainManagerCurrentHeight(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.setupCM()
-			ctx := context.Background()
 
-			height, err := cm.CurrentHeight(ctx)
+			height, err := cm.CurrentHeight(t.Context())
 
 			if tt.expectedError != nil {
 				require.Error(t, err)

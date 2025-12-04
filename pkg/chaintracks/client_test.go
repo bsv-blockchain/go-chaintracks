@@ -1,7 +1,6 @@
 package chaintracks
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -137,8 +136,7 @@ func TestClientGetTip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := tt.setupClient()
-			ctx := context.Background()
-			result := client.GetTip(ctx)
+			result := client.GetTip(t.Context())
 
 			if tt.expected == nil {
 				assert.Nil(t, result)
@@ -207,8 +205,7 @@ func TestClientGetHeight(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := tt.setupClient()
-			ctx := context.Background()
-			result := client.GetHeight(ctx)
+			result := client.GetHeight(t.Context())
 			assert.Equal(t, tt.expectedHeight, result)
 		})
 	}
@@ -290,8 +287,7 @@ func TestClientGetHeaderByHeight(t *testing.T) {
 			defer server.Close()
 
 			client := NewClient(server.URL)
-			ctx := context.Background()
-			result, err := client.GetHeaderByHeight(ctx, tt.height)
+			result, err := client.GetHeaderByHeight(t.Context(), tt.height)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
@@ -360,8 +356,7 @@ func TestClientGetHeaderByHash(t *testing.T) {
 			defer server.Close()
 
 			client := NewClient(server.URL)
-			ctx := context.Background()
-			result, err := client.GetHeaderByHash(ctx, tt.hash)
+			result, err := client.GetHeaderByHash(t.Context(), tt.hash)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
@@ -437,8 +432,7 @@ func TestClientGetNetwork(t *testing.T) {
 			defer server.Close()
 
 			client := NewClient(server.URL)
-			ctx := context.Background()
-			result, err := client.GetNetwork(ctx)
+			result, err := client.GetNetwork(t.Context())
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
@@ -483,8 +477,7 @@ func TestClientCurrentHeight(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := tt.setupClient()
-			ctx := context.Background()
-			result, err := client.CurrentHeight(ctx)
+			result, err := client.CurrentHeight(t.Context())
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedHeight, result)
 		})
@@ -570,8 +563,7 @@ func TestClientIsValidRootForHeight(t *testing.T) {
 			defer server.Close()
 
 			client := NewClient(server.URL)
-			ctx := context.Background()
-			valid, err := client.IsValidRootForHeight(ctx, tt.root, tt.height)
+			valid, err := client.IsValidRootForHeight(t.Context(), tt.root, tt.height)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
