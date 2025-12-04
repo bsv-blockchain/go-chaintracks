@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -23,6 +24,7 @@ func TestHandleGetNetwork(t *testing.T) {
 
 func TestHandleGetHeight(t *testing.T) {
 	app, cm := setupTestApp(t)
+	ctx := context.Background()
 
 	resp := httpGet(t, app, "/v2/height")
 	requireStatus(t, resp, 200)
@@ -35,11 +37,12 @@ func TestHandleGetHeight(t *testing.T) {
 	parseJSONResponse(t, resp.Body, &response)
 
 	assert.Equal(t, "success", response.Status)
-	assert.Equal(t, cm.GetHeight(), uint32(response.Value))
+	assert.Equal(t, cm.GetHeight(ctx), uint32(response.Value))
 }
 
 func TestHandleGetTipHash(t *testing.T) {
 	app, cm := setupTestApp(t)
+	ctx := context.Background()
 
 	resp := httpGet(t, app, "/v2/tip/hash")
 	requireStatus(t, resp, 200)
@@ -52,11 +55,12 @@ func TestHandleGetTipHash(t *testing.T) {
 	parseJSONResponse(t, resp.Body, &response)
 
 	assert.Equal(t, "success", response.Status)
-	assert.Equal(t, cm.GetTip().Header.Hash().String(), response.Value)
+	assert.Equal(t, cm.GetTip(ctx).Header.Hash().String(), response.Value)
 }
 
 func TestHandleGetTipHeader(t *testing.T) {
 	app, cm := setupTestApp(t)
+	ctx := context.Background()
 
 	resp := httpGet(t, app, "/v2/tip/header")
 	requireStatus(t, resp, 200)
@@ -68,13 +72,14 @@ func TestHandleGetTipHeader(t *testing.T) {
 	parseJSONResponse(t, resp.Body, &response)
 
 	assert.Equal(t, "success", response.Status)
-	assert.Equal(t, cm.GetTip().Height, response.Value.Height)
+	assert.Equal(t, cm.GetTip(ctx).Height, response.Value.Height)
 }
 
 func TestHandleGetHeaderByHeight(t *testing.T) {
 	app, cm := setupTestApp(t)
+	ctx := context.Background()
 
-	if cm.GetHeight() < 100 {
+	if cm.GetHeight(ctx) < 100 {
 		t.Skip("Not enough headers to test")
 	}
 
@@ -109,8 +114,9 @@ func TestHandleGetHeaderByHeight_NotFound(t *testing.T) {
 
 func TestHandleGetHeaderByHash(t *testing.T) {
 	app, cm := setupTestApp(t)
+	ctx := context.Background()
 
-	tip := cm.GetTip()
+	tip := cm.GetTip(ctx)
 	hash := tip.Header.Hash().String()
 
 	resp := httpGet(t, app, "/v2/header/hash/"+hash)
@@ -153,8 +159,9 @@ func TestHandleGetHeaderByHash_NotFound(t *testing.T) {
 
 func TestHandleGetHeaders(t *testing.T) {
 	app, cm := setupTestApp(t)
+	ctx := context.Background()
 
-	if cm.GetHeight() < 10 {
+	if cm.GetHeight(ctx) < 10 {
 		t.Skip("Not enough headers to test")
 	}
 

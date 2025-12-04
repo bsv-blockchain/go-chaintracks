@@ -21,36 +21,33 @@ func (cm *ChainManager) Start(ctx context.Context) (<-chan *BlockHeader, error) 
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	if cm.p2pClient != nil {
-		return nil, ErrP2PAlreadyStarted
+	// Create P2P client internally if one wasn't provided
+	if cm.p2pClient == nil {
+		privKey, err := LoadOrGeneratePrivateKey(cm.localStoragePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load/generate private key: %w", err)
+		}
+
+		p2pClient, err := p2p.NewClient(p2p.Config{
+			Name:          "go-chaintracks",
+			Logger:        &p2p.DefaultLogger{},
+			PrivateKey:    privKey,
+			Port:          0,
+			PeerCacheFile: filepath.Join(cm.localStoragePath, "peer_cache.json"),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create P2P client: %w", err)
+		}
+		cm.p2pClient = p2pClient
 	}
 
-	// Load or generate private key
-	privKey, err := loadOrGeneratePrivateKey(cm.localStoragePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load private key: %w", err)
-	}
-
-	// Create P2P client
-	client, err := p2p.NewClient(p2p.Config{
-		Name:          "go-chaintracks",
-		Logger:        &p2p.DefaultLogger{},
-		PrivateKey:    privKey,
-		Port:          0, // Random port
-		PeerCacheFile: filepath.Join(cm.localStoragePath, "peer_cache.json"),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create P2P client: %w", err)
-	}
-
-	cm.p2pClient = client
 	cm.msgChan = make(chan *BlockHeader, 1) // Buffered channel (size 1) for latest tip only
 
 	// Subscribe to block topic
 	topic := fmt.Sprintf("teranode/bitcoin/1.0.0/%snet-block", cm.network)
 	log.Printf("Subscribing to P2P topic: %s", topic)
 
-	msgChan := client.Subscribe(topic)
+	msgChan := cm.p2pClient.Subscribe(topic)
 
 	// Start message handler goroutine
 	go func() {
@@ -132,12 +129,18 @@ func (cm *ChainManager) handleBlockMessage(ctx context.Context, data []byte) err
 		return fmt.Errorf("failed to parse header: %w", err)
 	}
 
+	// Check if we already have this block
+	blockHash := header.Hash()
+	if _, err := cm.GetHeaderByHash(ctx, &blockHash); err == nil {
+		return nil
+	}
+
 	// Check if parent exists in our chain
 	parentHash := header.PrevHash
-	_, err = cm.GetHeaderByHash(&parentHash)
+	_, err = cm.GetHeaderByHash(ctx, &parentHash)
 	if err == nil {
 		// Parent exists - simple case
-		return cm.addBlockToChain(header, blockMsg.Height)
+		return cm.addBlockToChain(ctx, header, blockMsg.Height)
 	}
 
 	// Parent doesn't exist - need to crawl back
@@ -146,10 +149,10 @@ func (cm *ChainManager) handleBlockMessage(ctx context.Context, data []byte) err
 }
 
 // addBlockToChain processes a block and evaluates if it becomes the new chain tip
-func (cm *ChainManager) addBlockToChain(header *block.Header, height uint32) error {
+func (cm *ChainManager) addBlockToChain(ctx context.Context, header *block.Header, height uint32) error {
 	// Get parent to calculate chainwork
 	parentHash := header.PrevHash
-	parentHeader, err := cm.GetHeaderByHash(&parentHash)
+	parentHeader, err := cm.GetHeaderByHash(ctx, &parentHash)
 	if err != nil {
 		return fmt.Errorf("failed to get parent header: %w", err)
 	}
@@ -172,10 +175,10 @@ func (cm *ChainManager) addBlockToChain(header *block.Header, height uint32) err
 	}
 
 	// Check if this is the new tip
-	currentTip := cm.GetTip()
+	currentTip := cm.GetTip(ctx)
 	if currentTip == nil || blockHeader.ChainWork.Cmp(currentTip.ChainWork) > 0 {
 		log.Printf("New tip: height=%d chainwork=%s", blockHeader.Height, blockHeader.ChainWork.String())
-		return cm.SetChainTip([]*BlockHeader{blockHeader})
+		return cm.SetChainTip(ctx, []*BlockHeader{blockHeader})
 	}
 
 	log.Printf("Block added as orphan/alternate chain: height=%d", blockHeader.Height)
@@ -183,14 +186,14 @@ func (cm *ChainManager) addBlockToChain(header *block.Header, height uint32) err
 }
 
 // crawlBackAndMerge fetches missing parents until we find a connection to our chain
-func (cm *ChainManager) crawlBackAndMerge(_ context.Context, header *block.Header, _ uint32, dataHubURL string) error {
+func (cm *ChainManager) crawlBackAndMerge(ctx context.Context, header *block.Header, _ uint32, dataHubURL string) error {
 	// Use the shared sync logic to walk backwards and find common ancestor
 	blockHash := header.Hash()
-	return cm.SyncFromRemoteTip(blockHash, dataHubURL)
+	return cm.SyncFromRemoteTip(ctx, blockHash, dataHubURL)
 }
 
-// loadOrGeneratePrivateKey loads a private key from file or generates a new one
-func loadOrGeneratePrivateKey(storagePath string) (crypto.PrivKey, error) {
+// LoadOrGeneratePrivateKey loads a private key from file or generates a new one
+func LoadOrGeneratePrivateKey(storagePath string) (crypto.PrivKey, error) {
 	keyPath := filepath.Join(storagePath, "p2p_key.hex")
 
 	// Try to load existing key

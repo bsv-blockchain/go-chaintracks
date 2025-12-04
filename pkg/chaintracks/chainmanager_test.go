@@ -1,6 +1,7 @@
 package chaintracks
 
 import (
+	"context"
 	"testing"
 
 	"github.com/bsv-blockchain/go-sdk/block"
@@ -48,7 +49,8 @@ func TestChainManagerGetTip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.setupCM()
-			result := cm.GetTip()
+			ctx := context.Background()
+			result := cm.GetTip(ctx)
 
 			if tt.expected == nil {
 				assert.Nil(t, result)
@@ -117,7 +119,8 @@ func TestChainManagerGetHeight(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.setupCM()
-			result := cm.GetHeight()
+			ctx := context.Background()
+			result := cm.GetHeight(ctx)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -155,8 +158,9 @@ func TestChainManagerGetNetwork(t *testing.T) {
 			cm := &ChainManager{
 				network: tt.network,
 			}
+			ctx := context.Background()
 
-			result, err := cm.GetNetwork()
+			result, err := cm.GetNetwork(ctx)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
@@ -271,7 +275,8 @@ func TestChainManagerGetHeaderByHeight(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.setupCM()
-			result, err := cm.GetHeaderByHeight(tt.height)
+			ctx := context.Background()
+			result, err := cm.GetHeaderByHeight(ctx, tt.height)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
@@ -367,7 +372,8 @@ func TestChainManagerGetHeaderByHash(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.setupCM()
-			result, err := cm.GetHeaderByHash(tt.hash)
+			ctx := context.Background()
+			result, err := cm.GetHeaderByHash(ctx, tt.hash)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)

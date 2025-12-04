@@ -137,7 +137,8 @@ func TestClientGetTip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := tt.setupClient()
-			result := client.GetTip()
+			ctx := context.Background()
+			result := client.GetTip(ctx)
 
 			if tt.expected == nil {
 				assert.Nil(t, result)
@@ -206,7 +207,8 @@ func TestClientGetHeight(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := tt.setupClient()
-			result := client.GetHeight()
+			ctx := context.Background()
+			result := client.GetHeight(ctx)
 			assert.Equal(t, tt.expectedHeight, result)
 		})
 	}
@@ -288,7 +290,8 @@ func TestClientGetHeaderByHeight(t *testing.T) {
 			defer server.Close()
 
 			client := NewClient(server.URL)
-			result, err := client.GetHeaderByHeight(tt.height)
+			ctx := context.Background()
+			result, err := client.GetHeaderByHeight(ctx, tt.height)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
@@ -357,7 +360,8 @@ func TestClientGetHeaderByHash(t *testing.T) {
 			defer server.Close()
 
 			client := NewClient(server.URL)
-			result, err := client.GetHeaderByHash(tt.hash)
+			ctx := context.Background()
+			result, err := client.GetHeaderByHash(ctx, tt.hash)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
@@ -433,7 +437,8 @@ func TestClientGetNetwork(t *testing.T) {
 			defer server.Close()
 
 			client := NewClient(server.URL)
-			result, err := client.GetNetwork()
+			ctx := context.Background()
+			result, err := client.GetNetwork(ctx)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)

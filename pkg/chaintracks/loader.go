@@ -1,6 +1,7 @@
 package chaintracks
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -57,7 +58,7 @@ func parseMetadata(path string) (*CDNMetadata, error) {
 
 // loadFromLocalFiles restores the chain from local header files
 // No validation is performed - we trust our own checkpoint and exported files
-func (cm *ChainManager) loadFromLocalFiles() error {
+func (cm *ChainManager) loadFromLocalFiles(ctx context.Context) error {
 	metadataPath := filepath.Join(cm.localStoragePath, cm.network+"NetBlockHeaders.json")
 	log.Printf("Loading checkpoint metadata from: %s", metadataPath)
 
@@ -88,7 +89,7 @@ func (cm *ChainManager) loadFromLocalFiles() error {
 			prevChainWork = big.NewInt(0)
 		} else {
 			// Get the chainwork from the previous block (last block of previous file)
-			prevHeader, err := cm.GetHeaderByHeight(fileEntry.FirstHeight - 1)
+			prevHeader, err := cm.GetHeaderByHeight(ctx, fileEntry.FirstHeight-1)
 			if err != nil {
 				return fmt.Errorf("failed to get previous header at height %d: %w", fileEntry.FirstHeight-1, err)
 			}
@@ -117,7 +118,7 @@ func (cm *ChainManager) loadFromLocalFiles() error {
 			blockHeaders = append(blockHeaders, blockHeader)
 		}
 
-		if err := cm.SetChainTip(blockHeaders); err != nil {
+		if err := cm.SetChainTip(ctx, blockHeaders); err != nil {
 			return fmt.Errorf("failed to set chain tip for file %s: %w", fileEntry.FileName, err)
 		}
 	}
@@ -130,7 +131,7 @@ func (cm *ChainManager) loadFromLocalFiles() error {
 // The parent of branchHeaders[0] must exist in our current chain
 //
 //nolint:gocyclo // Complex validation and reorganization logic
-func (cm *ChainManager) SetChainTip(branchHeaders []*BlockHeader) error {
+func (cm *ChainManager) SetChainTip(ctx context.Context, branchHeaders []*BlockHeader) error {
 	if len(branchHeaders) == 0 {
 		return nil
 	}
@@ -193,7 +194,7 @@ func (cm *ChainManager) SetChainTip(branchHeaders []*BlockHeader) error {
 
 	// Update metadata
 	startMeta := time.Now()
-	if err := cm.updateMetadataForTip(); err != nil {
+	if err := cm.updateMetadataForTip(ctx); err != nil {
 		return fmt.Errorf("failed to update metadata: %w", err)
 	}
 	metaDuration := time.Since(startMeta)
@@ -257,7 +258,7 @@ func (cm *ChainManager) writeHeadersToFiles(headers []*BlockHeader) error {
 }
 
 // updateMetadataForTip updates the metadata JSON with current chain tip info
-func (cm *ChainManager) updateMetadataForTip() error {
+func (cm *ChainManager) updateMetadataForTip(ctx context.Context) error {
 	if cm.localStoragePath == "" {
 		return nil
 	}
@@ -281,7 +282,7 @@ func (cm *ChainManager) updateMetadataForTip() error {
 	}
 
 	// Update file entries based on current chain
-	tip := cm.GetTip()
+	tip := cm.GetTip(ctx)
 	if tip == nil {
 		return nil
 	}
@@ -310,7 +311,7 @@ func (cm *ChainManager) updateMetadataForTip() error {
 
 	// Get previous header for prevChainWork and prevHash
 	if tip.Height > 0 {
-		prevHeader, err := cm.GetHeaderByHeight(tip.Height - 1)
+		prevHeader, err := cm.GetHeaderByHeight(ctx, tip.Height-1)
 		if err == nil {
 			lastFileEntry.PrevChainWork = ChainWorkToHex(prevHeader.ChainWork)
 			lastFileEntry.PrevHash = prevHeader.Hash

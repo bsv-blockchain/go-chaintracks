@@ -2,6 +2,7 @@
 package chaintracks
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -29,8 +30,9 @@ type ChainManager struct {
 }
 
 // NewChainManager creates a new ChainManager and restores from local files if present
+// If p2pClient is provided, it will use that instead of creating its own
 // If bootstrapURL is provided, it will sync from a remote teranode before returning
-func NewChainManager(network, localStoragePath string, bootstrapURL ...string) (*ChainManager, error) {
+func NewChainManager(ctx context.Context, network, localStoragePath string, p2pClient p2p.Client, bootstrapURL ...string) (*ChainManager, error) {
 	// Default to ~/.chaintracks if no path provided
 	if localStoragePath == "" {
 		homeDir, err := os.UserHomeDir()
@@ -52,25 +54,26 @@ func NewChainManager(network, localStoragePath string, bootstrapURL ...string) (
 		byHash:           make(map[chainhash.Hash]*BlockHeader),
 		network:          network,
 		localStoragePath: localStoragePath,
+		p2pClient:        p2pClient,
 	}
 
 	log.Printf("ChainManager initializing: network=%s, path=%s", network, localStoragePath)
 
 	// Auto-restore from local files if they exist
-	if err := cm.loadFromLocalFiles(); err != nil {
+	if err := cm.loadFromLocalFiles(ctx); err != nil {
 		return nil, fmt.Errorf("failed to load checkpoint files: %w", err)
 	}
 
 	// Run bootstrap sync if configured (optional parameter)
 	if len(bootstrapURL) > 0 && bootstrapURL[0] != "" {
-		cm.runBootstrapSync(bootstrapURL[0])
+		cm.runBootstrapSync(ctx, bootstrapURL[0])
 	}
 
 	return cm, nil
 }
 
 // runBootstrapSync performs initial sync from a bootstrap node
-func (cm *ChainManager) runBootstrapSync(url string) {
+func (cm *ChainManager) runBootstrapSync(ctx context.Context, url string) {
 	log.Printf("Bootstrap URL configured: %s", url)
 
 	// Get the latest block hash from the bootstrap node
@@ -81,19 +84,19 @@ func (cm *ChainManager) runBootstrapSync(url string) {
 	}
 
 	log.Printf("Bootstrap node tip: %s", remoteTipHash.String())
-	if err := cm.SyncFromRemoteTip(remoteTipHash, url); err != nil {
+	if err := cm.SyncFromRemoteTip(ctx, remoteTipHash, url); err != nil {
 		log.Printf("Bootstrap sync failed: %v (will continue with P2P sync)", err)
 		return
 	}
 
 	// Log updated chain state after bootstrap
-	if tip := cm.GetTip(); tip != nil {
+	if tip := cm.GetTip(ctx); tip != nil {
 		log.Printf("Chain tip after bootstrap: %s at height %d", tip.Header.Hash().String(), tip.Height)
 	}
 }
 
 // GetHeaderByHeight retrieves a header by height
-func (cm *ChainManager) GetHeaderByHeight(height uint32) (*BlockHeader, error) {
+func (cm *ChainManager) GetHeaderByHeight(ctx context.Context, height uint32) (*BlockHeader, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
@@ -114,7 +117,7 @@ func (cm *ChainManager) GetHeaderByHeight(height uint32) (*BlockHeader, error) {
 }
 
 // GetHeaderByHash retrieves a header by hash
-func (cm *ChainManager) GetHeaderByHash(hash *chainhash.Hash) (*BlockHeader, error) {
+func (cm *ChainManager) GetHeaderByHash(ctx context.Context, hash *chainhash.Hash) (*BlockHeader, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
@@ -127,14 +130,14 @@ func (cm *ChainManager) GetHeaderByHash(hash *chainhash.Hash) (*BlockHeader, err
 }
 
 // GetTip returns the current chain tip
-func (cm *ChainManager) GetTip() *BlockHeader {
+func (cm *ChainManager) GetTip(ctx context.Context) *BlockHeader {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.tip
 }
 
 // GetHeight returns the current chain height
-func (cm *ChainManager) GetHeight() uint32 {
+func (cm *ChainManager) GetHeight(ctx context.Context) uint32 {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	if cm.tip == nil {
@@ -154,7 +157,7 @@ func (cm *ChainManager) AddHeader(header *BlockHeader) error {
 }
 
 // GetNetwork returns the network name
-func (cm *ChainManager) GetNetwork() (string, error) {
+func (cm *ChainManager) GetNetwork(ctx context.Context) (string, error) {
 	return cm.network, nil
 }
 

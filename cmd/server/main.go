@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	p2p "github.com/bsv-blockchain/go-p2p-message-bus"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -36,23 +37,41 @@ func main() {
 		log.Fatalf("Failed to initialize headers: %v", err)
 	}
 
+	// Start P2P listener
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Load or generate private key
+	privKey, err := chaintracks.LoadOrGeneratePrivateKey(config.StoragePath)
+	if err != nil {
+		log.Fatalf("Failed to load or generate private key: %v", err)
+	}
+
+	// Create P2P client
+	p2pClient, err := p2p.NewClient(p2p.Config{
+		Name:          "go-chaintracks",
+		Logger:        &p2p.DefaultLogger{},
+		PrivateKey:    privKey,
+		Port:          0, // Random port
+		PeerCacheFile: filepath.Join(config.StoragePath, "peer_cache.json"),
+	})
+	if err != nil {
+		log.Fatalf("Failed to create P2P client: %v", err)
+	}
+
 	// Create chain manager with optional bootstrap URL
 	// Bootstrap happens synchronously in the constructor before returning
-	cm, err := chaintracks.NewChainManager(config.Network, config.StoragePath, config.BootstrapURL)
+	cm, err := chaintracks.NewChainManager(ctx, config.Network, config.StoragePath, p2pClient, config.BootstrapURL)
 	if err != nil {
 		log.Fatalf("Failed to create chain manager: %v", err)
 	}
 
-	height := cm.GetHeight()
+	height := cm.GetHeight(ctx)
 	log.Printf("Loaded %d headers", height)
 
-	if tip := cm.GetTip(); tip != nil {
+	if tip := cm.GetTip(ctx); tip != nil {
 		log.Printf("Chain tip: %s at height %d", tip.Header.Hash().String(), tip.Height)
 	}
-
-	// Start P2P listener
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	blockMsgChan, err := cm.Start(ctx)
 	if err != nil {

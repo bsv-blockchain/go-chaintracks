@@ -23,8 +23,8 @@ func NewDashboardHandler(server *Server) *DashboardHandler {
 
 // HandleStatus renders the status dashboard
 func (h *DashboardHandler) HandleStatus(c *fiber.Ctx) error {
-	tip := h.server.cm.GetTip()
-	height := h.server.cm.GetHeight()
+	tip := h.server.cm.GetTip(c.UserContext())
+	height := h.server.cm.GetHeight(c.UserContext())
 
 	var tipHash string
 	var tipChainwork string
@@ -36,7 +36,7 @@ func (h *DashboardHandler) HandleStatus(c *fiber.Ctx) error {
 		tipChainwork = "N/A"
 	}
 
-	network, err := h.server.cm.GetNetwork()
+	network, err := h.server.cm.GetNetwork(c.UserContext())
 	if err != nil {
 		network = "unknown"
 	}

@@ -8,9 +8,9 @@ import (
 
 // IsValidRootForHeight implements the ChainTracker interface
 // Validates that the given merkle root matches the header at the specified height
-func (cm *ChainManager) IsValidRootForHeight(_ context.Context, root *chainhash.Hash, height uint32) (bool, error) {
+func (cm *ChainManager) IsValidRootForHeight(ctx context.Context, root *chainhash.Hash, height uint32) (bool, error) {
 	// Get the header at the given height
-	header, err := cm.GetHeaderByHeight(height)
+	header, err := cm.GetHeaderByHeight(ctx, height)
 	if err != nil {
 		return false, err
 	}
@@ -21,6 +21,6 @@ func (cm *ChainManager) IsValidRootForHeight(_ context.Context, root *chainhash.
 
 // CurrentHeight implements the ChainTracker interface
 // Returns the current height of the blockchain
-func (cm *ChainManager) CurrentHeight(_ context.Context) (uint32, error) {
-	return cm.GetHeight(), nil
+func (cm *ChainManager) CurrentHeight(ctx context.Context) (uint32, error) {
+	return cm.GetHeight(ctx), nil
 }

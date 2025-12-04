@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
+	p2p "github.com/bsv-blockchain/go-p2p-message-bus"
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/require"
 
@@ -60,7 +63,25 @@ func withEnvVars(t *testing.T, vars map[string]string) func() {
 // setupTestApp creates a test Fiber app with all routes configured
 func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
 	t.Helper()
-	cm, err := chaintracks.NewChainManager("main", "../../data/headers", "")
+
+	ctx := context.Background()
+	storagePath := "../../data/headers"
+
+	// Load or generate private key for P2P
+	privKey, err := chaintracks.LoadOrGeneratePrivateKey(storagePath)
+	require.NoError(t, err, "Failed to load or generate private key")
+
+	// Create P2P client
+	p2pClient, err := p2p.NewClient(p2p.Config{
+		Name:          "go-chaintracks-test",
+		Logger:        &p2p.DefaultLogger{},
+		PrivateKey:    privKey,
+		Port:          0,
+		PeerCacheFile: filepath.Join(storagePath, "peer_cache.json"),
+	})
+	require.NoError(t, err, "Failed to create P2P client")
+
+	cm, err := chaintracks.NewChainManager(ctx, "main", storagePath, p2pClient, "")
 	require.NoError(t, err, "Failed to create chain manager")
 
 	server := NewServer(cm)

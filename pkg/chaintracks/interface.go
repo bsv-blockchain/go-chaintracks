@@ -21,17 +21,17 @@ type Chaintracks interface {
 	Stop() error
 
 	// GetHeight returns the current blockchain height
-	GetHeight() uint32
+	GetHeight(ctx context.Context) uint32
 
 	// GetTip returns the current chain tip
-	GetTip() *BlockHeader
+	GetTip(ctx context.Context) *BlockHeader
 
 	// GetHeaderByHeight retrieves a block header by its height
-	GetHeaderByHeight(height uint32) (*BlockHeader, error)
+	GetHeaderByHeight(ctx context.Context, height uint32) (*BlockHeader, error)
 
 	// GetHeaderByHash retrieves a block header by its hash
-	GetHeaderByHash(hash *chainhash.Hash) (*BlockHeader, error)
+	GetHeaderByHash(ctx context.Context, hash *chainhash.Hash) (*BlockHeader, error)
 
 	// GetNetwork returns the network name (mainnet, testnet, etc.)
-	GetNetwork() (string, error)
+	GetNetwork(ctx context.Context) (string, error)
 }

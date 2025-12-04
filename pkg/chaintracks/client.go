@@ -135,14 +135,14 @@ func (cc *Client) Stop() error {
 }
 
 // GetTip returns the current chain tip
-func (cc *Client) GetTip() *BlockHeader {
+func (cc *Client) GetTip(ctx context.Context) *BlockHeader {
 	cc.tipMu.RLock()
 	defer cc.tipMu.RUnlock()
 	return cc.currentTip
 }
 
 // GetHeight returns the current chain height
-func (cc *Client) GetHeight() uint32 {
+func (cc *Client) GetHeight(ctx context.Context) uint32 {
 	cc.tipMu.RLock()
 	defer cc.tipMu.RUnlock()
 	if cc.currentTip == nil {
@@ -152,20 +152,20 @@ func (cc *Client) GetHeight() uint32 {
 }
 
 // GetHeaderByHeight retrieves a header by height from the server
-func (cc *Client) GetHeaderByHeight(height uint32) (*BlockHeader, error) {
+func (cc *Client) GetHeaderByHeight(ctx context.Context, height uint32) (*BlockHeader, error) {
 	url := fmt.Sprintf("%s/v2/header/height/%d", cc.baseURL, height)
-	return cc.fetchHeader(url)
+	return cc.fetchHeader(ctx, url)
 }
 
 // GetHeaderByHash retrieves a header by hash from the server
-func (cc *Client) GetHeaderByHash(hash *chainhash.Hash) (*BlockHeader, error) {
+func (cc *Client) GetHeaderByHash(ctx context.Context, hash *chainhash.Hash) (*BlockHeader, error) {
 	url := fmt.Sprintf("%s/v2/header/hash/%s", cc.baseURL, hash.String())
-	return cc.fetchHeader(url)
+	return cc.fetchHeader(ctx, url)
 }
 
 // fetchHeader is a helper to fetch and parse a header from the server
-func (cc *Client) fetchHeader(url string) (*BlockHeader, error) {
-	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
+func (cc *Client) fetchHeader(ctx context.Context, url string) (*BlockHeader, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -199,8 +199,8 @@ func (cc *Client) fetchHeader(url string) (*BlockHeader, error) {
 }
 
 // IsValidRootForHeight implements the ChainTracker interface
-func (cc *Client) IsValidRootForHeight(_ context.Context, root *chainhash.Hash, height uint32) (bool, error) {
-	header, err := cc.GetHeaderByHeight(height) //nolint:contextcheck // Interface doesn't support context
+func (cc *Client) IsValidRootForHeight(ctx context.Context, root *chainhash.Hash, height uint32) (bool, error) {
+	header, err := cc.GetHeaderByHeight(ctx, height)
 	if err != nil {
 		return false, err
 	}
@@ -208,13 +208,13 @@ func (cc *Client) IsValidRootForHeight(_ context.Context, root *chainhash.Hash, 
 }
 
 // CurrentHeight implements the ChainTracker interface
-func (cc *Client) CurrentHeight(_ context.Context) (uint32, error) {
-	return cc.GetHeight(), nil
+func (cc *Client) CurrentHeight(ctx context.Context) (uint32, error) {
+	return cc.GetHeight(ctx), nil
 }
 
 // GetNetwork returns the network name from the server
-func (cc *Client) GetNetwork() (string, error) {
-	req, err := http.NewRequestWithContext(context.Background(), "GET", cc.baseURL+"/v2/network", nil)
+func (cc *Client) GetNetwork(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", cc.baseURL+"/v2/network", nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}

@@ -23,9 +23,9 @@ const (
 // bootstrap sync and P2P block messages with unknown parents.
 //
 //nolint:gocyclo // Complex sync and ancestor finding logic
-func (cm *ChainManager) SyncFromRemoteTip(remoteTipHash chainhash.Hash, baseURL string) error {
+func (cm *ChainManager) SyncFromRemoteTip(ctx context.Context, remoteTipHash chainhash.Hash, baseURL string) error {
 	// Check if we already have the remote tip
-	if _, err := cm.GetHeaderByHash(&remoteTipHash); err == nil {
+	if _, err := cm.GetHeaderByHash(ctx, &remoteTipHash); err == nil {
 		log.Printf("Already have block %s", remoteTipHash.String())
 		return nil
 	}
@@ -39,7 +39,7 @@ func (cm *ChainManager) SyncFromRemoteTip(remoteTipHash chainhash.Hash, baseURL 
 	startTime := time.Now()
 	for {
 		// Check if we have this block in our chain
-		existingHeader, err := cm.GetHeaderByHash(&currentHash)
+		existingHeader, err := cm.GetHeaderByHash(ctx, &currentHash)
 		if err == nil {
 			// Found common ancestor!
 			commonAncestor = existingHeader
@@ -68,7 +68,7 @@ func (cm *ChainManager) SyncFromRemoteTip(remoteTipHash chainhash.Hash, baseURL 
 		found := false
 		for i, header := range headers {
 			hash := header.Hash()
-			if existingHeader, err := cm.GetHeaderByHash(&hash); err == nil {
+			if existingHeader, err := cm.GetHeaderByHash(ctx, &hash); err == nil {
 				// Found common ancestor!
 				commonAncestor = existingHeader
 				// Trim the branch to only include headers after the common ancestor
@@ -125,12 +125,12 @@ func (cm *ChainManager) SyncFromRemoteTip(remoteTipHash chainhash.Hash, baseURL 
 
 	// Import entire branch in one operation
 	startSetTip := time.Now()
-	if err := cm.SetChainTip(blockHeaders); err != nil {
+	if err := cm.SetChainTip(ctx, blockHeaders); err != nil {
 		return fmt.Errorf("failed to set chain tip: %w", err)
 	}
 	log.Printf("SetChainTip took %v", time.Since(startSetTip))
 
-	newTip := cm.GetTip()
+	newTip := cm.GetTip(ctx)
 	log.Printf("Sync complete. New chain tip: %s at height %d (added %d headers)",
 		newTip.Header.Hash().String(), newTip.Height, len(blockHeaders))
 
