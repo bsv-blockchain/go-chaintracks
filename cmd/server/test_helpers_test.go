@@ -65,23 +65,24 @@ func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
 	t.Helper()
 
 	ctx := context.Background()
-	storagePath := "../../data/headers"
 
-	// Load or generate private key for P2P
-	privKey, err := chaintracks.LoadOrGeneratePrivateKey(storagePath)
+	// Create temp directory and copy checkpoint files
+	tempDir := t.TempDir()
+	copyCheckpointFiles(t, "../../data/headers", tempDir, "main")
+
+	privKey, err := chaintracks.LoadOrGeneratePrivateKey(tempDir)
 	require.NoError(t, err, "Failed to load or generate private key")
 
-	// Create P2P client
 	p2pClient, err := p2p.NewClient(p2p.Config{
 		Name:          "go-chaintracks-test",
 		Logger:        &p2p.DefaultLogger{},
 		PrivateKey:    privKey,
 		Port:          0,
-		PeerCacheFile: filepath.Join(storagePath, "peer_cache.json"),
+		PeerCacheFile: filepath.Join(tempDir, "peer_cache.json"),
 	})
 	require.NoError(t, err, "Failed to create P2P client")
 
-	cm, err := chaintracks.NewChainManager(ctx, "main", storagePath, p2pClient, "")
+	cm, err := chaintracks.NewChainManager(ctx, "main", tempDir, p2pClient, "")
 	require.NoError(t, err, "Failed to create chain manager")
 
 	server := NewServer(cm)
@@ -89,6 +90,25 @@ func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
 	dashboard := NewDashboardHandler(server)
 	server.SetupRoutes(app, dashboard)
 	return app, cm
+}
+
+// copyCheckpointFiles copies checkpoint header files to a temp directory
+func copyCheckpointFiles(t *testing.T, srcDir, dstDir, network string) {
+	t.Helper()
+
+	files, err := filepath.Glob(filepath.Join(srcDir, network+"*"))
+	if err != nil || len(files) == 0 {
+		return
+	}
+
+	for _, srcFile := range files {
+		data, err := os.ReadFile(srcFile) //nolint:gosec // Test helper reading from known checkpoint directory
+		require.NoError(t, err, "Failed to read checkpoint file")
+
+		dstFile := filepath.Join(dstDir, filepath.Base(srcFile))
+		err = os.WriteFile(dstFile, data, 0o600)
+		require.NoError(t, err, "Failed to write checkpoint file")
+	}
 }
 
 // testResponse holds the result of an HTTP test request

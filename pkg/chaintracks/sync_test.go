@@ -82,7 +82,7 @@ func TestFetchLatestBlock(t *testing.T) {
 			server := tt.setupServer()
 			defer server.Close()
 
-			hash, err := FetchLatestBlock(server.URL)
+			hash, err := FetchLatestBlock(t.Context(), server.URL)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)

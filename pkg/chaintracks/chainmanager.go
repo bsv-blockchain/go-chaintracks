@@ -77,7 +77,7 @@ func (cm *ChainManager) runBootstrapSync(ctx context.Context, url string) {
 	log.Printf("Bootstrap URL configured: %s", url)
 
 	// Get the latest block hash from the bootstrap node
-	remoteTipHash, err := FetchLatestBlock(url)
+	remoteTipHash, err := FetchLatestBlock(ctx, url)
 	if err != nil {
 		log.Printf("Failed to get bootstrap node tip: %v (will continue with P2P sync)", err)
 		return
@@ -96,7 +96,7 @@ func (cm *ChainManager) runBootstrapSync(ctx context.Context, url string) {
 }
 
 // GetHeaderByHeight retrieves a header by height
-func (cm *ChainManager) GetHeaderByHeight(ctx context.Context, height uint32) (*BlockHeader, error) {
+func (cm *ChainManager) GetHeaderByHeight(_ context.Context, height uint32) (*BlockHeader, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
@@ -117,7 +117,7 @@ func (cm *ChainManager) GetHeaderByHeight(ctx context.Context, height uint32) (*
 }
 
 // GetHeaderByHash retrieves a header by hash
-func (cm *ChainManager) GetHeaderByHash(ctx context.Context, hash *chainhash.Hash) (*BlockHeader, error) {
+func (cm *ChainManager) GetHeaderByHash(_ context.Context, hash *chainhash.Hash) (*BlockHeader, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
@@ -130,14 +130,14 @@ func (cm *ChainManager) GetHeaderByHash(ctx context.Context, hash *chainhash.Has
 }
 
 // GetTip returns the current chain tip
-func (cm *ChainManager) GetTip(ctx context.Context) *BlockHeader {
+func (cm *ChainManager) GetTip(_ context.Context) *BlockHeader {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.tip
 }
 
 // GetHeight returns the current chain height
-func (cm *ChainManager) GetHeight(ctx context.Context) uint32 {
+func (cm *ChainManager) GetHeight(_ context.Context) uint32 {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	if cm.tip == nil {
@@ -157,7 +157,7 @@ func (cm *ChainManager) AddHeader(header *BlockHeader) error {
 }
 
 // GetNetwork returns the network name
-func (cm *ChainManager) GetNetwork(ctx context.Context) (string, error) {
+func (cm *ChainManager) GetNetwork(_ context.Context) (string, error) {
 	return cm.network, nil
 }
 

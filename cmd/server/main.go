@@ -20,58 +20,24 @@ import (
 )
 
 func main() {
-	// Load .env file if it exists (ignore error if not found)
 	_ = godotenv.Load()
 
 	config := LoadConfig()
-
-	log.Printf("Starting chaintracks-server")
-	log.Printf("  Network: %s", config.Network)
-	log.Printf("  Port: %d", config.Port)
-	log.Printf("  Storage Path: %s", config.StoragePath)
-	if config.BootstrapURL != "" {
-		log.Printf("  Bootstrap URL: %s", config.BootstrapURL)
-	}
+	logConfig(config)
 
 	if err := ensureHeadersExist(config.StoragePath, config.Network); err != nil {
 		log.Fatalf("Failed to initialize headers: %v", err)
 	}
 
-	// Start P2P listener
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Load or generate private key
-	privKey, err := chaintracks.LoadOrGeneratePrivateKey(config.StoragePath)
-	if err != nil {
-		log.Fatalf("Failed to load or generate private key: %v", err)
-	}
-
-	// Create P2P client
-	p2pClient, err := p2p.NewClient(p2p.Config{
-		Name:          "go-chaintracks",
-		Logger:        &p2p.DefaultLogger{},
-		PrivateKey:    privKey,
-		Port:          0, // Random port
-		PeerCacheFile: filepath.Join(config.StoragePath, "peer_cache.json"),
-	})
-	if err != nil {
-		log.Fatalf("Failed to create P2P client: %v", err)
-	}
-
-	// Create chain manager with optional bootstrap URL
-	// Bootstrap happens synchronously in the constructor before returning
-	cm, err := chaintracks.NewChainManager(ctx, config.Network, config.StoragePath, p2pClient, config.BootstrapURL)
+	cm, err := createChainManager(ctx, config)
 	if err != nil {
 		log.Fatalf("Failed to create chain manager: %v", err)
 	}
 
-	height := cm.GetHeight(ctx)
-	log.Printf("Loaded %d headers", height)
-
-	if tip := cm.GetTip(ctx); tip != nil {
-		log.Printf("Chain tip: %s at height %d", tip.Header.Hash().String(), tip.Height)
-	}
+	logChainState(ctx, cm)
 
 	blockMsgChan, err := cm.Start(ctx)
 	if err != nil {
@@ -79,17 +45,60 @@ func main() {
 	}
 	log.Printf("P2P listener started for network: %s", config.Network)
 
-	server := NewServer(cm)
+	app := createFiberApp(ctx, cm, blockMsgChan, config.Port)
 
-	// Start broadcasting tip changes to SSE clients
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	shutdown(cancel, cm, app)
+}
+
+func logConfig(config *Config) {
+	log.Printf("Starting chaintracks-server")
+	log.Printf("  Network: %s", config.Network)
+	log.Printf("  Port: %d", config.Port)
+	log.Printf("  Storage Path: %s", config.StoragePath)
+	if config.BootstrapURL != "" {
+		log.Printf("  Bootstrap URL: %s", config.BootstrapURL)
+	}
+}
+
+func createChainManager(ctx context.Context, config *Config) (*chaintracks.ChainManager, error) {
+	privKey, err := chaintracks.LoadOrGeneratePrivateKey(config.StoragePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load or generate private key: %w", err)
+	}
+
+	p2pClient, err := p2p.NewClient(p2p.Config{
+		Name:          "go-chaintracks",
+		Logger:        &p2p.DefaultLogger{},
+		PrivateKey:    privKey,
+		Port:          0,
+		PeerCacheFile: filepath.Join(config.StoragePath, "peer_cache.json"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create P2P client: %w", err)
+	}
+
+	return chaintracks.NewChainManager(ctx, config.Network, config.StoragePath, p2pClient, config.BootstrapURL)
+}
+
+func logChainState(ctx context.Context, cm *chaintracks.ChainManager) {
+	log.Printf("Loaded %d headers", cm.GetHeight(ctx))
+	if tip := cm.GetTip(ctx); tip != nil {
+		log.Printf("Chain tip: %s at height %d", tip.Header.Hash().String(), tip.Height)
+	}
+}
+
+func createFiberApp(ctx context.Context, cm *chaintracks.ChainManager, blockMsgChan <-chan *chaintracks.BlockHeader, port int) *fiber.App {
+	server := NewServer(cm)
 	server.StartBroadcasting(ctx, blockMsgChan)
 
-	// Create Fiber app
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 	})
 
-	// Add middleware
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowHeaders: "*",
@@ -100,14 +109,10 @@ func main() {
 		Format: "${method} ${path} - ${status} (${latency})\n",
 	}))
 
-	// Create dashboard
 	dashboard := NewDashboardHandler(server)
-
-	// Setup routes
 	server.SetupRoutes(app, dashboard)
 
-	addr := fmt.Sprintf(":%d", config.Port)
-
+	addr := fmt.Sprintf(":%d", port)
 	go func() {
 		log.Printf("Server listening on http://localhost%s", addr)
 		log.Printf("Available endpoints:")
@@ -124,10 +129,10 @@ func main() {
 		}
 	}()
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	<-sigChan
+	return app
+}
 
+func shutdown(cancel context.CancelFunc, cm *chaintracks.ChainManager, app *fiber.App) {
 	log.Println("Shutting down gracefully...")
 	cancel()
 	if err := cm.Stop(); err != nil {

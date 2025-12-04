@@ -131,7 +131,7 @@ func (cm *ChainManager) handleBlockMessage(ctx context.Context, data []byte) err
 
 	// Check if we already have this block
 	blockHash := header.Hash()
-	if _, err := cm.GetHeaderByHash(ctx, &blockHash); err == nil {
+	if _, existsErr := cm.GetHeaderByHash(ctx, &blockHash); existsErr == nil {
 		return nil
 	}
 

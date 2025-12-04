@@ -135,14 +135,14 @@ func (cc *Client) Stop() error {
 }
 
 // GetTip returns the current chain tip
-func (cc *Client) GetTip(ctx context.Context) *BlockHeader {
+func (cc *Client) GetTip(_ context.Context) *BlockHeader {
 	cc.tipMu.RLock()
 	defer cc.tipMu.RUnlock()
 	return cc.currentTip
 }
 
 // GetHeight returns the current chain height
-func (cc *Client) GetHeight(ctx context.Context) uint32 {
+func (cc *Client) GetHeight(_ context.Context) uint32 {
 	cc.tipMu.RLock()
 	defer cc.tipMu.RUnlock()
 	if cc.currentTip == nil {

@@ -138,8 +138,8 @@ func (cm *ChainManager) SyncFromRemoteTip(ctx context.Context, remoteTipHash cha
 }
 
 // FetchLatestBlock gets the latest block hash from the node's bestblockheader endpoint
-func FetchLatestBlock(baseURL string) (chainhash.Hash, error) {
-	req, err := http.NewRequestWithContext(context.Background(), "GET", fmt.Sprintf("%s/bestblockheader", baseURL), nil)
+func FetchLatestBlock(ctx context.Context, baseURL string) (chainhash.Hash, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/bestblockheader", baseURL), nil)
 	if err != nil {
 		return chainhash.Hash{}, fmt.Errorf("failed to create request: %w", err)
 	}
