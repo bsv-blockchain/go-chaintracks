@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	p2p "github.com/bsv-blockchain/go-p2p-message-bus"
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/require"
 
@@ -59,7 +58,8 @@ func withEnvVars(t *testing.T, vars map[string]string) func() {
 	}
 }
 
-// setupTestApp creates a test Fiber app with all routes configured
+// setupTestApp creates a test Fiber app with all routes configured.
+// P2P client is nil since tests don't call Start() - avoids slow network initialization.
 func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
 	t.Helper()
 
@@ -69,19 +69,8 @@ func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
 	tempDir := t.TempDir()
 	copyCheckpointFiles(t, "../../data/headers", tempDir, "main")
 
-	privKey, err := chaintracks.LoadOrGeneratePrivateKey(tempDir)
-	require.NoError(t, err, "Failed to load or generate private key")
-
-	p2pClient, err := p2p.NewClient(p2p.Config{
-		Name:          "go-chaintracks-test",
-		Logger:        &p2p.DefaultLogger{},
-		PrivateKey:    privKey,
-		Port:          0,
-		PeerCacheFile: filepath.Join(tempDir, "peer_cache.json"),
-	})
-	require.NoError(t, err, "Failed to create P2P client")
-
-	cm, err := chaintracks.NewChainManager(ctx, "main", tempDir, p2pClient, "")
+	// Pass nil for p2pClient - it's only used when Start() is called
+	cm, err := chaintracks.NewChainManager(ctx, "main", tempDir, nil, "")
 	require.NoError(t, err, "Failed to create chain manager")
 
 	server := NewServer(ctx, cm)

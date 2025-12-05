@@ -99,16 +99,8 @@ func TestHandleGetHeaderByHeight_NotFound(t *testing.T) {
 	app, _ := setupTestApp(t)
 
 	resp := httpGet(t, app, "/v2/header/height/99999999")
-	requireStatus(t, resp, 200)
-
-	var response struct {
-		Status string      `json:"status"`
-		Value  interface{} `json:"value"`
-	}
-	parseJSONResponse(t, resp.Body, &response)
-
-	assert.Equal(t, "success", response.Status)
-	assert.Nil(t, response.Value, "Expected null value for non-existent header")
+	requireStatus(t, resp, 404)
+	requireErrorResponse(t, resp.Body)
 }
 
 func TestHandleGetHeaderByHash(t *testing.T) {
@@ -144,16 +136,8 @@ func TestHandleGetHeaderByHash_NotFound(t *testing.T) {
 
 	nonExistentHash := chainhash.Hash{}
 	resp := httpGet(t, app, "/v2/header/hash/"+nonExistentHash.String())
-	requireStatus(t, resp, 200)
-
-	var response struct {
-		Status string      `json:"status"`
-		Value  interface{} `json:"value"`
-	}
-	parseJSONResponse(t, resp.Body, &response)
-
-	assert.Equal(t, "success", response.Status)
-	assert.Nil(t, response.Value, "Expected null value for non-existent header")
+	requireStatus(t, resp, 404)
+	requireErrorResponse(t, resp.Body)
 }
 
 func TestHandleGetHeaders(t *testing.T) {

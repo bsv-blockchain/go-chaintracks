@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	p2p "github.com/bsv-blockchain/go-p2p-message-bus"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -215,25 +214,8 @@ func TestLoadFromLocalFiles(t *testing.T) {
 
 	ctx := t.Context()
 
-	// Load or generate private key for P2P
-	privKey, err := LoadOrGeneratePrivateKey(testCDNPath)
-	if err != nil {
-		t.Fatalf("Failed to load or generate private key: %v", err)
-	}
-
-	// Create P2P client
-	p2pClient, err := p2p.NewClient(p2p.Config{
-		Name:          "go-chaintracks-test",
-		Logger:        &p2p.DefaultLogger{},
-		PrivateKey:    privKey,
-		Port:          0,
-		PeerCacheFile: filepath.Join(testCDNPath, "peer_cache.json"),
-	})
-	if err != nil {
-		t.Fatalf("Failed to create P2P client: %v", err)
-	}
-
-	cm, err := NewChainManager(ctx, "main", testCDNPath, p2pClient)
+	// Pass nil for p2pClient - this test only verifies file loading, not P2P
+	cm, err := NewChainManager(ctx, "main", testCDNPath, nil)
 	if err != nil {
 		t.Fatalf("Failed to create ChainManager: %v", err)
 	}
