@@ -112,7 +112,7 @@ func logChainState(ctx context.Context, cm *chaintracks.ChainManager) {
 }
 
 func createFiberApp(ctx context.Context, cm *chaintracks.ChainManager, blockMsgChan <-chan *chaintracks.BlockHeader, port int) *fiber.App {
-	server := NewServer(cm)
+	server := NewServer(ctx, cm)
 	server.StartBroadcasting(ctx, blockMsgChan)
 
 	app := fiber.New(fiber.Config{

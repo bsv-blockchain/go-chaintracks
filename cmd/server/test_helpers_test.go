@@ -84,7 +84,7 @@ func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
 	cm, err := chaintracks.NewChainManager(ctx, "main", tempDir, p2pClient, "")
 	require.NoError(t, err, "Failed to create chain manager")
 
-	server := NewServer(cm)
+	server := NewServer(ctx, cm)
 	app := fiber.New()
 	dashboard := NewDashboardHandler(server)
 	server.SetupRoutes(app, dashboard)

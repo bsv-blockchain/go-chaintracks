@@ -24,14 +24,16 @@ var openapiSpec string
 
 // Server wraps the ChainManager with Fiber handlers
 type Server struct {
+	ctx          context.Context
 	cm           *chaintracks.ChainManager
 	sseClients   map[int64]*bufio.Writer
 	sseClientsMu sync.RWMutex
 }
 
 // NewServer creates a new API server
-func NewServer(cm *chaintracks.ChainManager) *Server {
+func NewServer(ctx context.Context, cm *chaintracks.ChainManager) *Server {
 	return &Server{
+		ctx:        ctx,
 		cm:         cm,
 		sseClients: make(map[int64]*bufio.Writer),
 	}
@@ -129,15 +131,17 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			// Send keepalive comment
-			if _, writeErr := fmt.Fprintf(w, ": keepalive\n\n"); writeErr != nil {
-				// Connection closed
+		for {
+			select {
+			case <-s.ctx.Done():
 				return
-			}
-			if err := w.Flush(); err != nil {
-				// Connection closed
-				return
+			case <-ticker.C:
+				if _, writeErr := fmt.Fprintf(w, ": keepalive\n\n"); writeErr != nil {
+					return
+				}
+				if err := w.Flush(); err != nil {
+					return
+				}
 			}
 		}
 	}))
