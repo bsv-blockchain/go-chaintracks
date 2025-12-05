@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	p2p "github.com/bsv-blockchain/go-p2p-message-bus"
 	"github.com/gofiber/fiber/v2"
@@ -45,6 +46,9 @@ func main() {
 	}
 	log.Printf("P2P listener started for network: %s", config.Network)
 
+	// Start periodic peer status logging
+	go logPeerStatus(ctx, cm)
+
 	app := createFiberApp(ctx, cm, blockMsgChan, config.Port)
 
 	sigChan := make(chan os.Signal, 1)
@@ -71,17 +75,33 @@ func createChainManager(ctx context.Context, config *Config) (*chaintracks.Chain
 	}
 
 	p2pClient, err := p2p.NewClient(p2p.Config{
-		Name:          "go-chaintracks",
-		Logger:        &p2p.DefaultLogger{},
-		PrivateKey:    privKey,
-		Port:          0,
-		PeerCacheFile: filepath.Join(config.StoragePath, "peer_cache.json"),
+		Name:           "go-chaintracks",
+		Logger:         &p2p.DefaultLogger{},
+		PrivateKey:     privKey,
+		Port:           0,
+		PeerCacheFile:  filepath.Join(config.StoragePath, "peer_cache.json"),
+		BootstrapPeers: config.BootstrapPeers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create P2P client: %w", err)
 	}
 
 	return chaintracks.NewChainManager(ctx, config.Network, config.StoragePath, p2pClient, config.BootstrapURL)
+}
+
+func logPeerStatus(ctx context.Context, cm *chaintracks.ChainManager) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			peers := cm.GetPeers()
+			log.Printf("Connected to %d P2P peers", len(peers))
+		}
+	}
 }
 
 func logChainState(ctx context.Context, cm *chaintracks.ChainManager) {
