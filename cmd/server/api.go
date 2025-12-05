@@ -23,6 +23,8 @@ import (
 var openapiSpec string
 
 // Server wraps the ChainManager with Fiber handlers
+//
+//nolint:containedctx // Context stored for SSE stream shutdown detection
 type Server struct {
 	ctx          context.Context
 	cm           *chaintracks.ChainManager
