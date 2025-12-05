@@ -23,15 +23,19 @@ import (
 var openapiSpec string
 
 // Server wraps the ChainManager with Fiber handlers
+//
+//nolint:containedctx // Context stored for SSE stream shutdown detection
 type Server struct {
+	ctx          context.Context
 	cm           *chaintracks.ChainManager
 	sseClients   map[int64]*bufio.Writer
 	sseClientsMu sync.RWMutex
 }
 
 // NewServer creates a new API server
-func NewServer(cm *chaintracks.ChainManager) *Server {
+func NewServer(ctx context.Context, cm *chaintracks.ChainManager) *Server {
 	return &Server{
+		ctx:        ctx,
 		cm:         cm,
 		sseClients: make(map[int64]*bufio.Writer),
 	}
@@ -97,6 +101,9 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 	c.Set("Connection", "keep-alive")
 	c.Set("Transfer-Encoding", "chunked")
 
+	// Capture context before entering stream writer
+	ctx := c.UserContext()
+
 	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
 		clientID := time.Now().UnixNano()
 
@@ -111,7 +118,7 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 		}()
 
 		// Send initial tip
-		tip := s.cm.GetTip()
+		tip := s.cm.GetTip(ctx)
 		if tip != nil { //nolint:nestif // SSE stream initialization logic
 
 			data, err := json.Marshal(tip)
@@ -129,15 +136,17 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			// Send keepalive comment
-			if _, writeErr := fmt.Fprintf(w, ": keepalive\n\n"); writeErr != nil {
-				// Connection closed
+		for {
+			select {
+			case <-s.ctx.Done():
 				return
-			}
-			if err := w.Flush(); err != nil {
-				// Connection closed
-				return
+			case <-ticker.C:
+				if _, writeErr := fmt.Fprintf(w, ": keepalive\n\n"); writeErr != nil {
+					return
+				}
+				if err := w.Flush(); err != nil {
+					return
+				}
 			}
 		}
 	}))
@@ -169,7 +178,7 @@ func (s *Server) HandleRobots(c *fiber.Ctx) error {
 
 // HandleGetNetwork returns the network name
 func (s *Server) HandleGetNetwork(c *fiber.Ctx) error {
-	network, err := s.cm.GetNetwork()
+	network, err := s.cm.GetNetwork(c.UserContext())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(Response{
 			Status: "error",
@@ -187,7 +196,7 @@ func (s *Server) HandleGetHeight(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "public, max-age=60")
 	return c.JSON(Response{
 		Status: "success",
-		Value:  s.cm.GetHeight(),
+		Value:  s.cm.GetHeight(c.UserContext()),
 	})
 }
 
@@ -195,7 +204,7 @@ func (s *Server) HandleGetHeight(c *fiber.Ctx) error {
 func (s *Server) HandleGetTipHash(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 
-	tip := s.cm.GetTip()
+	tip := s.cm.GetTip(c.UserContext())
 	if tip == nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
@@ -215,7 +224,7 @@ func (s *Server) HandleGetTipHash(c *fiber.Ctx) error {
 func (s *Server) HandleGetTipHeader(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 
-	tip := s.cm.GetTip()
+	tip := s.cm.GetTip(c.UserContext())
 	if tip == nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
@@ -250,18 +259,19 @@ func (s *Server) HandleGetHeaderByHeight(c *fiber.Ctx) error {
 		})
 	}
 
-	tip := s.cm.GetHeight()
+	tip := s.cm.GetHeight(c.UserContext())
 	if uint32(height) < tip-100 {
 		c.Set("Cache-Control", "public, max-age=3600")
 	} else {
 		c.Set("Cache-Control", "no-cache")
 	}
 
-	header, err := s.cm.GetHeaderByHeight(uint32(height))
+	header, err := s.cm.GetHeaderByHeight(c.UserContext(), uint32(height))
 	if err != nil {
-		return c.JSON(Response{
-			Status: "success",
-			Value:  nil,
+		return c.Status(fiber.StatusNotFound).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_NOT_FOUND",
+			Description: "Header not found at height " + heightStr,
 		})
 	}
 
@@ -291,15 +301,16 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 		})
 	}
 
-	header, err := s.cm.GetHeaderByHash(hash)
+	header, err := s.cm.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
-		return c.JSON(Response{
-			Status: "success",
-			Value:  nil,
+		return c.Status(fiber.StatusNotFound).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_NOT_FOUND",
+			Description: "Header not found for hash " + hashStr,
 		})
 	}
 
-	tip := s.cm.GetHeight()
+	tip := s.cm.GetHeight(c.UserContext())
 	if header.Height < tip-100 {
 		c.Set("Cache-Control", "public, max-age=3600")
 	} else {
@@ -343,7 +354,7 @@ func (s *Server) HandleGetHeaders(c *fiber.Ctx) error {
 		})
 	}
 
-	tip := s.cm.GetHeight()
+	tip := s.cm.GetHeight(c.UserContext())
 	if uint32(height) < tip-100 {
 		c.Set("Cache-Control", "public, max-age=3600")
 	} else {
@@ -353,7 +364,7 @@ func (s *Server) HandleGetHeaders(c *fiber.Ctx) error {
 	var hexData string
 	for i := uint32(0); i < uint32(count); i++ {
 		h := uint32(height) + i
-		header, err := s.cm.GetHeaderByHeight(h)
+		header, err := s.cm.GetHeaderByHeight(c.UserContext(), h)
 		if err != nil {
 			break
 		}

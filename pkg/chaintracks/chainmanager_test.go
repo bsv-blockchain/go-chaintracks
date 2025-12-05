@@ -48,7 +48,7 @@ func TestChainManagerGetTip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.setupCM()
-			result := cm.GetTip()
+			result := cm.GetTip(t.Context())
 
 			if tt.expected == nil {
 				assert.Nil(t, result)
@@ -117,7 +117,7 @@ func TestChainManagerGetHeight(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.setupCM()
-			result := cm.GetHeight()
+			result := cm.GetHeight(t.Context())
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -156,7 +156,7 @@ func TestChainManagerGetNetwork(t *testing.T) {
 				network: tt.network,
 			}
 
-			result, err := cm.GetNetwork()
+			result, err := cm.GetNetwork(t.Context())
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
@@ -271,7 +271,7 @@ func TestChainManagerGetHeaderByHeight(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.setupCM()
-			result, err := cm.GetHeaderByHeight(tt.height)
+			result, err := cm.GetHeaderByHeight(t.Context(), tt.height)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
@@ -367,7 +367,7 @@ func TestChainManagerGetHeaderByHash(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.setupCM()
-			result, err := cm.GetHeaderByHash(tt.hash)
+			result, err := cm.GetHeaderByHash(t.Context(), tt.hash)
 
 			if tt.expectedError != nil {
 				require.Error(t, err)

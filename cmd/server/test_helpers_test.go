@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -57,17 +58,45 @@ func withEnvVars(t *testing.T, vars map[string]string) func() {
 	}
 }
 
-// setupTestApp creates a test Fiber app with all routes configured
+// setupTestApp creates a test Fiber app with all routes configured.
+// P2P client is nil since tests don't call Start() - avoids slow network initialization.
 func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
 	t.Helper()
-	cm, err := chaintracks.NewChainManager("main", "../../data/headers", "")
+
+	ctx := t.Context()
+
+	// Create temp directory and copy checkpoint files
+	tempDir := t.TempDir()
+	copyCheckpointFiles(t, "../../data/headers", tempDir, "main")
+
+	// Pass nil for p2pClient - it's only used when Start() is called
+	cm, err := chaintracks.NewChainManager(ctx, "main", tempDir, nil, "")
 	require.NoError(t, err, "Failed to create chain manager")
 
-	server := NewServer(cm)
+	server := NewServer(ctx, cm)
 	app := fiber.New()
 	dashboard := NewDashboardHandler(server)
 	server.SetupRoutes(app, dashboard)
 	return app, cm
+}
+
+// copyCheckpointFiles copies checkpoint header files to a temp directory
+func copyCheckpointFiles(t *testing.T, srcDir, dstDir, network string) {
+	t.Helper()
+
+	files, err := filepath.Glob(filepath.Join(srcDir, network+"*"))
+	if err != nil || len(files) == 0 {
+		return
+	}
+
+	for _, srcFile := range files {
+		data, err := os.ReadFile(srcFile) //nolint:gosec // Test helper reading from known checkpoint directory
+		require.NoError(t, err, "Failed to read checkpoint file")
+
+		dstFile := filepath.Join(dstDir, filepath.Base(srcFile))
+		err = os.WriteFile(dstFile, data, 0o600)
+		require.NoError(t, err, "Failed to write checkpoint file")
+	}
 }
 
 // testResponse holds the result of an HTTP test request

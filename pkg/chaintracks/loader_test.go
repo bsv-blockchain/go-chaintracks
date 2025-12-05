@@ -212,18 +212,21 @@ func TestLoadFromLocalFiles(t *testing.T) {
 		t.Skipf("Test CDN data not found at %s", testCDNPath)
 	}
 
-	cm, err := NewChainManager("main", testCDNPath)
+	ctx := t.Context()
+
+	// Pass nil for p2pClient - this test only verifies file loading, not P2P
+	cm, err := NewChainManager(ctx, "main", testCDNPath, nil)
 	if err != nil {
 		t.Fatalf("Failed to create ChainManager: %v", err)
 	}
 
-	if cm.GetHeight() == 0 {
+	if cm.GetHeight(ctx) == 0 {
 		t.Skip("No local files found, this is expected")
 	}
 
-	t.Logf("Loaded chain to height %d", cm.GetHeight())
+	t.Logf("Loaded chain to height %d", cm.GetHeight(ctx))
 
-	tip := cm.GetTip()
+	tip := cm.GetTip(ctx)
 	if tip == nil {
 		t.Fatal("Chain tip is nil")
 	}
