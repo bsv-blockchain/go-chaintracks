@@ -138,7 +138,3 @@ require (
 )
 
 replace github.com/bsv-blockchain/go-sdk => github.com/bsv-blockchain/go-sdk v1.2.12-0.20251119181029-d6554738622b
-
-replace github.com/bsv-blockchain/go-p2p-message-bus => ../go-p2p-message-bus
-
-// replace github.com/bsv-blockchain/go-sdk => ../go-sdk
