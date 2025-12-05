@@ -99,6 +99,9 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 	c.Set("Connection", "keep-alive")
 	c.Set("Transfer-Encoding", "chunked")
 
+	// Capture context before entering stream writer
+	ctx := c.UserContext()
+
 	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
 		clientID := time.Now().UnixNano()
 
@@ -113,7 +116,7 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 		}()
 
 		// Send initial tip
-		tip := s.cm.GetTip(c.UserContext())
+		tip := s.cm.GetTip(ctx)
 		if tip != nil { //nolint:nestif // SSE stream initialization logic
 
 			data, err := json.Marshal(tip)
