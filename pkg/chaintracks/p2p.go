@@ -135,16 +135,21 @@ func (cm *ChainManager) handleBlockMessage(ctx context.Context, data []byte) err
 		return nil
 	}
 
-	// Check if parent exists in our chain
+	// Check if parent exists in our main chain (not just as an orphan)
 	parentHash := header.PrevHash
-	_, err = cm.GetHeaderByHash(ctx, &parentHash)
+	parentHeader, err := cm.GetHeaderByHash(ctx, &parentHash)
 	if err == nil {
-		// Parent exists - simple case
-		return cm.addBlockToChain(ctx, header, blockMsg.Height)
+		// Parent exists in byHash - verify it's in the main chain (byHeight)
+		mainChainHeader, err := cm.GetHeaderByHeight(ctx, parentHeader.Height)
+		if err == nil && mainChainHeader.Hash == parentHash {
+			// Parent is in main chain - simple case
+			return cm.addBlockToChain(ctx, header, blockMsg.Height)
+		}
+		// Parent exists but is an orphan - need to crawl back to find common ancestor
+		log.Printf("Parent %s exists but is not in main chain at height %d, crawling back...", parentHash, parentHeader.Height)
+	} else {
+		log.Printf("Parent not found for block %s, crawling back...", blockMsg.Hash)
 	}
-
-	// Parent doesn't exist - need to crawl back
-	log.Printf("Parent not found for block %s, crawling back...", blockMsg.Hash)
 	return cm.crawlBackAndMerge(ctx, header, blockMsg.Height, blockMsg.DataHubURL)
 }
 

@@ -259,9 +259,10 @@ func (s *Server) HandleGetHeaderByHeight(c *fiber.Ctx) error {
 
 	header, err := s.cm.GetHeaderByHeight(c.UserContext(), uint32(height))
 	if err != nil {
-		return c.JSON(Response{
-			Status: "success",
-			Value:  nil,
+		return c.Status(fiber.StatusNotFound).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_NOT_FOUND",
+			Description: "Header not found at height " + heightStr,
 		})
 	}
 
@@ -293,9 +294,10 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 
 	header, err := s.cm.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
-		return c.JSON(Response{
-			Status: "success",
-			Value:  nil,
+		return c.Status(fiber.StatusNotFound).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_NOT_FOUND",
+			Description: "Header not found for hash " + hashStr,
 		})
 	}
 
