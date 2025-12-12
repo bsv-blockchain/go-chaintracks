@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bsv-blockchain/go-chaintracks/pkg/chaintracks"
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 func TestHandleGetNetwork(t *testing.T) {

@@ -1,82 +1,58 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
-	"os"
-	"path/filepath"
-	"strconv"
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
+	"github.com/bsv-blockchain/go-chaintracks/config"
+	"github.com/spf13/viper"
 )
 
-// Config holds the server configuration
-type Config struct {
-	Port           int
-	Network        string
-	StoragePath    string
-	BootstrapURL   string
-	BootstrapPeers []string
+// AppConfig holds all configuration for the server application.
+type AppConfig struct {
+	Port        int           `mapstructure:"port"`
+	Chaintracks config.Config `mapstructure:"chaintracks"`
 }
 
-// LoadConfig loads configuration from environment variables with defaults
-func LoadConfig() *Config {
-	port := 3011
-	if portStr := os.Getenv("PORT"); portStr != "" {
-		if p, err := strconv.Atoi(portStr); err == nil {
-			port = p
+// Load reads configuration from file and environment variables.
+func Load() (*AppConfig, error) {
+	v := viper.New()
+
+	cfg := &AppConfig{}
+
+	// Set defaults
+	v.SetDefault("port", 3011)
+	cfg.Chaintracks.SetDefaults(v, "chaintracks")
+
+	// Config file settings
+	v.SetConfigName("config")
+	v.SetConfigType("yaml")
+	v.AddConfigPath(".")
+	v.AddConfigPath("$HOME/.chaintracks")
+	v.AddConfigPath("/etc/chaintracks")
+
+	// Environment variable settings
+	v.SetEnvPrefix("CHAINTRACKS")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	// Read config file (optional - env vars can provide everything)
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
 	}
 
-	network := "main"
-	if net := os.Getenv("CHAIN"); net != "" {
-		network = net
+	if err := v.Unmarshal(cfg); err != nil {
+		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
-	storagePath := getDefaultStoragePath()
-	if path := os.Getenv("STORAGE_PATH"); path != "" {
-		storagePath = path
-	}
-
-	bootstrapURL := os.Getenv("BOOTSTRAP_URL")
-
-	bootstrapPeers := loadBootstrapPeers(network)
-
-	return &Config{
-		Port:           port,
-		Network:        network,
-		StoragePath:    storagePath,
-		BootstrapURL:   bootstrapURL,
-		BootstrapPeers: bootstrapPeers,
-	}
+	return cfg, nil
 }
 
-// loadBootstrapPeers loads P2P bootstrap peers from data/bootstrap_peers.json
-func loadBootstrapPeers(network string) []string {
-	data, err := os.ReadFile("data/bootstrap_peers.json")
-	if err != nil {
-		log.Printf("Warning: could not load bootstrap_peers.json: %v", err)
-		return nil
-	}
-
-	var peers map[string][]string
-	if err := json.Unmarshal(data, &peers); err != nil {
-		log.Printf("Warning: could not parse bootstrap_peers.json: %v", err)
-		return nil
-	}
-
-	if networkPeers, ok := peers[network]; ok {
-		log.Printf("Loaded %d bootstrap peers for network %s", len(networkPeers), network)
-		return networkPeers
-	}
-
-	log.Printf("Warning: no bootstrap peers found for network %s", network)
-	return nil
-}
-
-// getDefaultStoragePath returns ~/.chaintracks as the default storage path
-func getDefaultStoragePath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "./data/headers"
-	}
-	return filepath.Join(home, ".chaintracks")
+// Initialize creates and returns the chaintracks service.
+func (c *AppConfig) Initialize(ctx context.Context) (chaintracks.Chaintracks, error) {
+	return c.Chaintracks.Initialize(ctx, "chaintracks", nil)
 }

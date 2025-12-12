@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
+	msgbus "github.com/bsv-blockchain/go-p2p-message-bus"
 	"github.com/gofiber/fiber/v2"
-
-	"github.com/bsv-blockchain/go-chaintracks/pkg/chaintracks"
 )
 
 // DashboardHandler serves a simple status dashboard
@@ -23,8 +23,8 @@ func NewDashboardHandler(server *Server) *DashboardHandler {
 
 // HandleStatus renders the status dashboard
 func (h *DashboardHandler) HandleStatus(c *fiber.Ctx) error {
-	tip := h.server.cm.GetTip(c.UserContext())
-	height := h.server.cm.GetHeight(c.UserContext())
+	tip := h.server.ct.GetTip(c.UserContext())
+	height := h.server.ct.GetHeight(c.UserContext())
 
 	var tipHash string
 	var tipChainwork string
@@ -36,12 +36,16 @@ func (h *DashboardHandler) HandleStatus(c *fiber.Ctx) error {
 		tipChainwork = "N/A"
 	}
 
-	network, err := h.server.cm.GetNetwork(c.UserContext())
+	network, err := h.server.ct.GetNetwork(c.UserContext())
 	if err != nil {
 		network = "unknown"
 	}
 
-	peers := h.server.cm.GetPeers()
+	// Get peers if this is an embedded ChainManager
+	var peers []msgbus.PeerInfo
+	if cm, ok := h.server.ct.(*chainmanager.ChainManager); ok {
+		peers = cm.P2PClient.GetPeers()
+	}
 	peerCount := len(peers)
 
 	html := fmt.Sprintf(`<!DOCTYPE html>
@@ -165,7 +169,7 @@ func (h *DashboardHandler) HandleStatus(c *fiber.Ctx) error {
 }
 
 // renderPeerList generates HTML for the peer list
-func (h *DashboardHandler) renderPeerList(peers []chaintracks.PeerInfo) string {
+func (h *DashboardHandler) renderPeerList(peers []msgbus.PeerInfo) string {
 	if len(peers) == 0 {
 		return `<div style="color: #808080; font-style: italic;">No peers connected</div>`
 	}

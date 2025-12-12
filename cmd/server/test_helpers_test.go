@@ -8,10 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bsv-blockchain/go-chaintracks/pkg/chaintracks"
 )
 
 // getConfigEnvVars returns the environment variables used for configuration
@@ -59,8 +58,7 @@ func withEnvVars(t *testing.T, vars map[string]string) func() {
 }
 
 // setupTestApp creates a test Fiber app with all routes configured.
-// P2P client is nil since tests don't call Start() - avoids slow network initialization.
-func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
+func setupTestApp(t *testing.T) (*fiber.App, *chainmanager.ChainManager) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -69,8 +67,7 @@ func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
 	tempDir := t.TempDir()
 	copyCheckpointFiles(t, "../../data/headers", tempDir, "main")
 
-	// Pass nil for p2pClient - it's only used when Start() is called
-	cm, err := chaintracks.NewChainManager(ctx, "main", tempDir, nil, "")
+	cm, err := chainmanager.NewForTesting(ctx, "main", tempDir)
 	require.NoError(t, err, "Failed to create chain manager")
 
 	server := NewServer(ctx, cm)

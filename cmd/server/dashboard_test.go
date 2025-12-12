@@ -4,22 +4,21 @@ import (
 	"strings"
 	"testing"
 
+	msgbus "github.com/bsv-blockchain/go-p2p-message-bus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bsv-blockchain/go-chaintracks/pkg/chaintracks"
 )
 
 func TestDashboardHandlerRenderPeerList(t *testing.T) {
 	tests := []struct {
 		name              string
-		peers             []chaintracks.PeerInfo
+		peers             []msgbus.PeerInfo
 		expectContains    []string
 		expectNotContains []string
 	}{
 		{
 			name:  "EmptyPeerList",
-			peers: []chaintracks.PeerInfo{},
+			peers: []msgbus.PeerInfo{},
 			expectContains: []string{
 				"No peers connected",
 				"color: #808080",
@@ -42,7 +41,7 @@ func TestDashboardHandlerRenderPeerList(t *testing.T) {
 		},
 		{
 			name: "SinglePeerWithValidName",
-			peers: []chaintracks.PeerInfo{
+			peers: []msgbus.PeerInfo{
 				{
 					ID:    "QmPeer12345",
 					Name:  "TestNode",
@@ -63,7 +62,7 @@ func TestDashboardHandlerRenderPeerList(t *testing.T) {
 		},
 		{
 			name: "MultiplePeers",
-			peers: []chaintracks.PeerInfo{
+			peers: []msgbus.PeerInfo{
 				{
 					ID:    "QmPeer1",
 					Name:  "NodeOne",
@@ -94,7 +93,7 @@ func TestDashboardHandlerRenderPeerList(t *testing.T) {
 		},
 		{
 			name: "PeerWithUnknownName",
-			peers: []chaintracks.PeerInfo{
+			peers: []msgbus.PeerInfo{
 				{
 					ID:    "QmPeer123",
 					Name:  "unknown",
@@ -111,7 +110,7 @@ func TestDashboardHandlerRenderPeerList(t *testing.T) {
 		},
 		{
 			name: "PeerWithEmptyName",
-			peers: []chaintracks.PeerInfo{
+			peers: []msgbus.PeerInfo{
 				{
 					ID:    "QmPeer456",
 					Name:  "",
@@ -128,7 +127,7 @@ func TestDashboardHandlerRenderPeerList(t *testing.T) {
 		},
 		{
 			name: "PeerWithMultipleAddresses",
-			peers: []chaintracks.PeerInfo{
+			peers: []msgbus.PeerInfo{
 				{
 					ID:   "QmPeerMulti",
 					Name: "MultiAddrNode",
@@ -150,7 +149,7 @@ func TestDashboardHandlerRenderPeerList(t *testing.T) {
 		},
 		{
 			name: "PeerWithNoAddresses",
-			peers: []chaintracks.PeerInfo{
+			peers: []msgbus.PeerInfo{
 				{
 					ID:    "QmPeerNoAddr",
 					Name:  "NoAddressNode",
@@ -167,7 +166,7 @@ func TestDashboardHandlerRenderPeerList(t *testing.T) {
 		},
 		{
 			name: "MixedPeerNames",
-			peers: []chaintracks.PeerInfo{
+			peers: []msgbus.PeerInfo{
 				{
 					ID:    "QmPeer1",
 					Name:  "ValidName",

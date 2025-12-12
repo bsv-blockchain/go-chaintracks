@@ -3,117 +3,88 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
-	p2p "github.com/bsv-blockchain/go-p2p-message-bus"
+	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/joho/godotenv"
-
-	"github.com/bsv-blockchain/go-chaintracks/pkg/chaintracks"
 )
 
 func main() {
 	_ = godotenv.Load()
 
-	config := LoadConfig()
-	logConfig(config)
-
-	if err := ensureHeadersExist(config.StoragePath, config.Network); err != nil {
-		log.Fatalf("Failed to initialize headers: %v", err)
+	cfg, err := Load()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
 	}
+
+	logConfig(cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cm, err := createChainManager(ctx, config)
+	ct, err := cfg.Initialize(ctx)
 	if err != nil {
-		log.Fatalf("Failed to create chain manager: %v", err)
+		log.Fatalf("Failed to create chaintracks: %v", err)
 	}
 
-	logChainState(ctx, cm)
+	go logStatus(ctx, ct)
 
-	blockMsgChan, err := cm.Start(ctx)
-	if err != nil {
-		log.Fatalf("Failed to start P2P: %v", err)
-	}
-	log.Printf("P2P listener started for network: %s", config.Network)
-
-	// Start periodic peer status logging
-	go logPeerStatus(ctx, cm)
-
-	app := createFiberApp(ctx, cm, blockMsgChan, config.Port)
+	app := createFiberApp(ctx, ct, cfg.Port)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
 
-	shutdown(cancel, cm, app)
+	shutdown(cancel, ct, app)
 }
 
-func logConfig(config *Config) {
+func logConfig(cfg *AppConfig) {
 	log.Printf("Starting chaintracks-server")
-	log.Printf("  Network: %s", config.Network)
-	log.Printf("  Port: %d", config.Port)
-	log.Printf("  Storage Path: %s", config.StoragePath)
-	if config.BootstrapURL != "" {
-		log.Printf("  Bootstrap URL: %s", config.BootstrapURL)
+	log.Printf("  Network: %s", cfg.Chaintracks.P2P.Network)
+	log.Printf("  Port: %d", cfg.Port)
+	log.Printf("  Storage Path: %s", cfg.Chaintracks.StoragePath)
+	if cfg.Chaintracks.BootstrapURL != "" {
+		log.Printf("  Bootstrap URL: %s", cfg.Chaintracks.BootstrapURL)
 	}
 }
 
-func createChainManager(ctx context.Context, config *Config) (*chaintracks.ChainManager, error) {
-	privKey, err := chaintracks.LoadOrGeneratePrivateKey(config.StoragePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load or generate private key: %w", err)
-	}
-
-	p2pClient, err := p2p.NewClient(p2p.Config{
-		Name:           "go-chaintracks",
-		Logger:         &p2p.DefaultLogger{},
-		PrivateKey:     privKey,
-		Port:           0,
-		PeerCacheFile:  filepath.Join(config.StoragePath, "peer_cache.json"),
-		BootstrapPeers: config.BootstrapPeers,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create P2P client: %w", err)
-	}
-
-	return chaintracks.NewChainManager(ctx, config.Network, config.StoragePath, p2pClient, config.BootstrapURL)
-}
-
-func logPeerStatus(ctx context.Context, cm *chaintracks.ChainManager) {
+func logStatus(ctx context.Context, ct chaintracks.Chaintracks) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+
+	// Type-assert to get peer count if available
+	var getPeerCount func() int
+	if cm, ok := ct.(*chainmanager.ChainManager); ok {
+		getPeerCount = func() int { return len(cm.P2PClient.GetPeers()) }
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			peers := cm.GetPeers()
-			log.Printf("Connected to %d P2P peers", len(peers))
+			tip := ct.GetTip(ctx)
+			if tip != nil {
+				if getPeerCount != nil {
+					log.Printf("Height: %d, Tip: %s, Peers: %d", tip.Height, tip.Header.Hash().String(), getPeerCount())
+				} else {
+					log.Printf("Height: %d, Tip: %s", tip.Height, tip.Header.Hash().String())
+				}
+			}
 		}
 	}
 }
 
-func logChainState(ctx context.Context, cm *chaintracks.ChainManager) {
-	log.Printf("Loaded %d headers", cm.GetHeight(ctx))
-	if tip := cm.GetTip(ctx); tip != nil {
-		log.Printf("Chain tip: %s at height %d", tip.Header.Hash().String(), tip.Height)
-	}
-}
-
-func createFiberApp(ctx context.Context, cm *chaintracks.ChainManager, blockMsgChan <-chan *chaintracks.BlockHeader, port int) *fiber.App {
-	server := NewServer(ctx, cm)
-	server.StartBroadcasting(ctx, blockMsgChan)
+func createFiberApp(ctx context.Context, ct chaintracks.Chaintracks, port int) *fiber.App {
+	server := NewServer(ctx, ct)
 
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
@@ -138,10 +109,12 @@ func createFiberApp(ctx context.Context, cm *chaintracks.ChainManager, blockMsgC
 		log.Printf("Available endpoints:")
 		log.Printf("  GET  http://localhost%s/ - Status Dashboard", addr)
 		log.Printf("  GET  http://localhost%s/docs - API Documentation (Swagger UI)", addr)
-		log.Printf("  GET  http://localhost%s/v2/network - Network name", addr)
-		log.Printf("  GET  http://localhost%s/v2/height - Current blockchain height", addr)
-		log.Printf("  GET  http://localhost%s/v2/tip/header - Chain tip header", addr)
-		log.Printf("  GET  http://localhost%s/v2/tip/stream - SSE stream for tip updates", addr)
+		log.Printf("  GET  http://localhost%s/v2/network", addr)
+		log.Printf("  GET  http://localhost%s/v2/tip", addr)
+		log.Printf("  GET  http://localhost%s/v2/tip/stream", addr)
+		log.Printf("  GET  http://localhost%s/v2/header/height/:height", addr)
+		log.Printf("  GET  http://localhost%s/v2/header/hash/:hash", addr)
+		log.Printf("  GET  http://localhost%s/v2/headers", addr)
 		log.Printf("Press Ctrl+C to stop")
 
 		if err := app.Listen(addr); err != nil {
@@ -152,82 +125,17 @@ func createFiberApp(ctx context.Context, cm *chaintracks.ChainManager, blockMsgC
 	return app
 }
 
-func shutdown(cancel context.CancelFunc, cm *chaintracks.ChainManager, app *fiber.App) {
+func shutdown(cancel context.CancelFunc, ct chaintracks.Chaintracks, app *fiber.App) {
 	log.Println("Shutting down gracefully...")
 	cancel()
-	if err := cm.Stop(); err != nil {
-		log.Printf("Error closing P2P: %v", err)
+	// Close P2P client if this is an embedded ChainManager
+	if cm, ok := ct.(*chainmanager.ChainManager); ok {
+		if err := cm.P2PClient.Close(); err != nil {
+			log.Printf("Error closing P2P client: %v", err)
+		}
 	}
 	if err := app.Shutdown(); err != nil {
 		log.Printf("Error closing server: %v", err)
 	}
 	log.Println("Server stopped")
-}
-
-// ensureHeadersExist checks if headers exist at storagePath, and if not, copies from checkpoint
-func ensureHeadersExist(storagePath, network string) error {
-	metadataFile := filepath.Join(storagePath, network+"NetBlockHeaders.json")
-
-	if _, err := os.Stat(metadataFile); err == nil {
-		return nil
-	}
-
-	log.Printf("No headers found at %s, initializing from checkpoint...", storagePath)
-
-	checkpointPath := filepath.Join("data", "headers")
-	checkpointMetadata := filepath.Join(checkpointPath, network+"NetBlockHeaders.json")
-
-	if _, err := os.Stat(checkpointMetadata); os.IsNotExist(err) {
-		log.Printf("Warning: No checkpoint headers found at %s", checkpointPath)
-		return nil
-	}
-
-	if err := os.MkdirAll(storagePath, 0o750); err != nil {
-		return fmt.Errorf("failed to create storage directory: %w", err)
-	}
-
-	files, err := filepath.Glob(filepath.Join(checkpointPath, network+"*"))
-	if err != nil {
-		return fmt.Errorf("failed to list checkpoint files: %w", err)
-	}
-
-	log.Printf("Copying %d checkpoint files to %s...", len(files), storagePath)
-	for _, srcFile := range files {
-		dstFile := filepath.Join(storagePath, filepath.Base(srcFile))
-		if err := copyFile(srcFile, dstFile); err != nil {
-			return fmt.Errorf("failed to copy %s: %w", srcFile, err)
-		}
-	}
-
-	log.Printf("Checkpoint headers initialized successfully")
-	return nil
-}
-
-// copyFile copies a file from src to dst
-func copyFile(src, dst string) (err error) {
-	sourceFile, err := os.Open(src) //nolint:gosec // Source path is from embedded checkpoint files
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := sourceFile.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
-
-	destFile, err := os.Create(dst) //nolint:gosec // Destination path is validated
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := destFile.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
-
-	if _, err := io.Copy(destFile, sourceFile); err != nil {
-		return err
-	}
-
-	return destFile.Sync()
 }

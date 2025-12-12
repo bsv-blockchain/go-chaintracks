@@ -5,92 +5,33 @@ import (
 	"bufio"
 	"context"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"sync"
 	"time"
 
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/gofiber/fiber/v2"
 	"github.com/valyala/fasthttp"
-
-	"github.com/bsv-blockchain/go-chaintracks/pkg/chaintracks"
 )
 
 //go:embed openapi.yaml
 var openapiSpec string
 
-// Server wraps the ChainManager with Fiber handlers
+// Server wraps the Chaintracks interface with Fiber handlers
 //
 //nolint:containedctx // Context stored for SSE stream shutdown detection
 type Server struct {
-	ctx          context.Context
-	cm           *chaintracks.ChainManager
-	sseClients   map[int64]*bufio.Writer
-	sseClientsMu sync.RWMutex
+	ctx context.Context
+	ct  chaintracks.Chaintracks
 }
 
 // NewServer creates a new API server
-func NewServer(ctx context.Context, cm *chaintracks.ChainManager) *Server {
+func NewServer(ctx context.Context, ct chaintracks.Chaintracks) *Server {
 	return &Server{
-		ctx:        ctx,
-		cm:         cm,
-		sseClients: make(map[int64]*bufio.Writer),
-	}
-}
-
-// StartBroadcasting listens to ChainManager tip changes and broadcasts to all SSE clients
-func (s *Server) StartBroadcasting(ctx context.Context, tipChan <-chan *chaintracks.BlockHeader) {
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case tip := <-tipChan:
-				if tip == nil {
-					continue
-				}
-				s.broadcastTip(tip)
-			}
-		}
-	}()
-}
-
-// broadcastTip sends a tip update to all connected SSE clients
-func (s *Server) broadcastTip(tip *chaintracks.BlockHeader) {
-	data, err := json.Marshal(tip)
-	if err != nil {
-		return
-	}
-
-	sseMessage := fmt.Sprintf("data: %s\n\n", string(data))
-
-	s.sseClientsMu.RLock()
-	clientsCopy := make(map[int64]*bufio.Writer, len(s.sseClients))
-	for id, writer := range s.sseClients {
-		clientsCopy[id] = writer
-	}
-	s.sseClientsMu.RUnlock()
-
-	var failedClients []int64
-	for id, writer := range clientsCopy {
-		if _, err := fmt.Fprint(writer, sseMessage); err != nil {
-			failedClients = append(failedClients, id)
-			continue
-		}
-		if err := writer.Flush(); err != nil {
-			failedClients = append(failedClients, id)
-		}
-	}
-
-	if len(failedClients) > 0 {
-		s.sseClientsMu.Lock()
-		for _, id := range failedClients {
-			delete(s.sseClients, id)
-		}
-		s.sseClientsMu.Unlock()
+		ctx: ctx,
+		ct:  ct,
 	}
 }
 
@@ -101,28 +42,17 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 	c.Set("Connection", "keep-alive")
 	c.Set("Transfer-Encoding", "chunked")
 
-	// Capture context before entering stream writer
-	ctx := c.UserContext()
-
 	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
-		clientID := time.Now().UnixNano()
+		// Create a context that cancels when the client disconnects
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer cancel()
 
-		s.sseClientsMu.Lock()
-		s.sseClients[clientID] = w
-		s.sseClientsMu.Unlock()
-
-		defer func() {
-			s.sseClientsMu.Lock()
-			delete(s.sseClients, clientID)
-			s.sseClientsMu.Unlock()
-		}()
+		// Subscribe to tip updates
+		tipChan := s.ct.Subscribe(ctx)
 
 		// Send initial tip
-		tip := s.cm.GetTip(ctx)
-		if tip != nil { //nolint:nestif // SSE stream initialization logic
-
-			data, err := json.Marshal(tip)
-			if err == nil {
+		if tip := s.ct.GetTip(ctx); tip != nil {
+			if data, err := json.Marshal(tip); err == nil {
 				if _, writeErr := fmt.Fprintf(w, "data: %s\n\n", string(data)); writeErr != nil {
 					return
 				}
@@ -138,8 +68,20 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 
 		for {
 			select {
-			case <-s.ctx.Done():
+			case <-ctx.Done():
 				return
+			case tip := <-tipChan:
+				if tip == nil {
+					continue
+				}
+				if data, err := json.Marshal(tip); err == nil {
+					if _, writeErr := fmt.Fprintf(w, "data: %s\n\n", string(data)); writeErr != nil {
+						return
+					}
+					if flushErr := w.Flush(); flushErr != nil {
+						return
+					}
+				}
 			case <-ticker.C:
 				if _, writeErr := fmt.Fprintf(w, ": keepalive\n\n"); writeErr != nil {
 					return
@@ -178,7 +120,7 @@ func (s *Server) HandleRobots(c *fiber.Ctx) error {
 
 // HandleGetNetwork returns the network name
 func (s *Server) HandleGetNetwork(c *fiber.Ctx) error {
-	network, err := s.cm.GetNetwork(c.UserContext())
+	network, err := s.ct.GetNetwork(c.UserContext())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(Response{
 			Status: "error",
@@ -191,40 +133,11 @@ func (s *Server) HandleGetNetwork(c *fiber.Ctx) error {
 	})
 }
 
-// HandleGetHeight returns the current blockchain height
-func (s *Server) HandleGetHeight(c *fiber.Ctx) error {
-	c.Set("Cache-Control", "public, max-age=60")
-	return c.JSON(Response{
-		Status: "success",
-		Value:  s.cm.GetHeight(c.UserContext()),
-	})
-}
-
-// HandleGetTipHash returns the chain tip hash
-func (s *Server) HandleGetTipHash(c *fiber.Ctx) error {
+// HandleGetTip returns the chain tip header
+func (s *Server) HandleGetTip(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 
-	tip := s.cm.GetTip(c.UserContext())
-	if tip == nil {
-		return c.Status(fiber.StatusNotFound).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_NO_TIP",
-			Description: "Chain tip not found",
-		})
-	}
-
-	hash := tip.Header.Hash()
-	return c.JSON(Response{
-		Status: "success",
-		Value:  &hash,
-	})
-}
-
-// HandleGetTipHeader returns the full chain tip header
-func (s *Server) HandleGetTipHeader(c *fiber.Ctx) error {
-	c.Set("Cache-Control", "no-cache")
-
-	tip := s.cm.GetTip(c.UserContext())
+	tip := s.ct.GetTip(c.UserContext())
 	if tip == nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
@@ -259,14 +172,14 @@ func (s *Server) HandleGetHeaderByHeight(c *fiber.Ctx) error {
 		})
 	}
 
-	tip := s.cm.GetHeight(c.UserContext())
+	tip := s.ct.GetHeight(c.UserContext())
 	if uint32(height) < tip-100 {
 		c.Set("Cache-Control", "public, max-age=3600")
 	} else {
 		c.Set("Cache-Control", "no-cache")
 	}
 
-	header, err := s.cm.GetHeaderByHeight(c.UserContext(), uint32(height))
+	header, err := s.ct.GetHeaderByHeight(c.UserContext(), uint32(height))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
@@ -301,7 +214,7 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 		})
 	}
 
-	header, err := s.cm.GetHeaderByHash(c.UserContext(), hash)
+	header, err := s.ct.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
@@ -310,7 +223,7 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 		})
 	}
 
-	tip := s.cm.GetHeight(c.UserContext())
+	tip := s.ct.GetHeight(c.UserContext())
 	if header.Height < tip-100 {
 		c.Set("Cache-Control", "public, max-age=3600")
 	} else {
@@ -354,29 +267,24 @@ func (s *Server) HandleGetHeaders(c *fiber.Ctx) error {
 		})
 	}
 
-	tip := s.cm.GetHeight(c.UserContext())
+	tip := s.ct.GetHeight(c.UserContext())
 	if uint32(height) < tip-100 {
 		c.Set("Cache-Control", "public, max-age=3600")
 	} else {
 		c.Set("Cache-Control", "no-cache")
 	}
 
-	var hexData string
+	var data []byte
 	for i := uint32(0); i < uint32(count); i++ {
-		h := uint32(height) + i
-		header, err := s.cm.GetHeaderByHeight(c.UserContext(), h)
+		header, err := s.ct.GetHeaderByHeight(c.UserContext(), uint32(height)+i)
 		if err != nil {
 			break
 		}
-
-		headerBytes := header.Bytes()
-		hexData += hex.EncodeToString(headerBytes)
+		data = append(data, header.Bytes()...)
 	}
 
-	return c.JSON(Response{
-		Status: "success",
-		Value:  hexData,
-	})
+	c.Set("Content-Type", "application/octet-stream")
+	return c.Send(data)
 }
 
 // HandleOpenAPISpec serves the OpenAPI specification
@@ -426,9 +334,7 @@ func (s *Server) SetupRoutes(app *fiber.App, dashboard *DashboardHandler) {
 
 	v2 := app.Group("/v2")
 	v2.Get("/network", s.HandleGetNetwork)
-	v2.Get("/height", s.HandleGetHeight)
-	v2.Get("/tip/hash", s.HandleGetTipHash)
-	v2.Get("/tip/header", s.HandleGetTipHeader)
+	v2.Get("/tip", s.HandleGetTip)
 	v2.Get("/tip/stream", s.HandleTipStream)
 	v2.Get("/header/height/:height", s.HandleGetHeaderByHeight)
 	v2.Get("/header/hash/:hash", s.HandleGetHeaderByHash)
