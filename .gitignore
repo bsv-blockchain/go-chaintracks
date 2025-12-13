@@ -34,8 +34,8 @@ dist
 coverage.txt
 coverage.out
 
-# Fuzz Tests
-testdata
+# Fuzz Tests (at package root level)
+**/testdata/fuzz/
 
 # Node modules
 node_modules/

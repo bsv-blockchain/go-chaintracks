@@ -21,48 +21,13 @@ func TestHandleGetNetwork(t *testing.T) {
 	assert.Equal(t, "main", response.Value)
 }
 
-func TestHandleGetHeight(t *testing.T) {
+func TestHandleGetTip(t *testing.T) {
 	app, cm := setupTestApp(t)
 	ctx := t.Context()
 
-	resp := httpGet(t, app, "/v2/height")
-	requireStatus(t, resp, 200)
-	assert.Equal(t, "public, max-age=60", resp.Headers["Cache-Control"])
-
-	var response struct {
-		Status string  `json:"status"`
-		Value  float64 `json:"value"`
-	}
-	parseJSONResponse(t, resp.Body, &response)
-
-	assert.Equal(t, "success", response.Status)
-	assert.Equal(t, cm.GetHeight(ctx), uint32(response.Value))
-}
-
-func TestHandleGetTipHash(t *testing.T) {
-	app, cm := setupTestApp(t)
-	ctx := t.Context()
-
-	resp := httpGet(t, app, "/v2/tip/hash")
+	resp := httpGet(t, app, "/v2/tip")
 	requireStatus(t, resp, 200)
 	assert.Equal(t, "no-cache", resp.Headers["Cache-Control"])
-
-	var response struct {
-		Status string `json:"status"`
-		Value  string `json:"value"`
-	}
-	parseJSONResponse(t, resp.Body, &response)
-
-	assert.Equal(t, "success", response.Status)
-	assert.Equal(t, cm.GetTip(ctx).Header.Hash().String(), response.Value)
-}
-
-func TestHandleGetTipHeader(t *testing.T) {
-	app, cm := setupTestApp(t)
-	ctx := t.Context()
-
-	resp := httpGet(t, app, "/v2/tip/header")
-	requireStatus(t, resp, 200)
 
 	var response struct {
 		Status string                   `json:"status"`
@@ -72,17 +37,13 @@ func TestHandleGetTipHeader(t *testing.T) {
 
 	assert.Equal(t, "success", response.Status)
 	assert.Equal(t, cm.GetTip(ctx).Height, response.Value.Height)
+	assert.Equal(t, cm.GetTip(ctx).Hash.String(), response.Value.Hash.String())
 }
 
 func TestHandleGetHeaderByHeight(t *testing.T) {
-	app, cm := setupTestApp(t)
-	ctx := t.Context()
+	app, _ := setupTestApp(t)
 
-	if cm.GetHeight(ctx) < 100 {
-		t.Skip("Not enough headers to test")
-	}
-
-	resp := httpGet(t, app, "/v2/header/height/100")
+	resp := httpGet(t, app, "/v2/header/height/0")
 	requireStatus(t, resp, 200)
 
 	var response struct {
@@ -92,7 +53,7 @@ func TestHandleGetHeaderByHeight(t *testing.T) {
 	parseJSONResponse(t, resp.Body, &response)
 
 	assert.Equal(t, "success", response.Status)
-	assert.Equal(t, uint32(100), response.Value.Height)
+	assert.Equal(t, uint32(0), response.Value.Height)
 }
 
 func TestHandleGetHeaderByHeight_NotFound(t *testing.T) {
@@ -141,25 +102,14 @@ func TestHandleGetHeaderByHash_NotFound(t *testing.T) {
 }
 
 func TestHandleGetHeaders(t *testing.T) {
-	app, cm := setupTestApp(t)
-	ctx := t.Context()
-
-	if cm.GetHeight(ctx) < 10 {
-		t.Skip("Not enough headers to test")
-	}
+	app, _ := setupTestApp(t)
 
 	resp := httpGet(t, app, "/v2/headers?height=0&count=10")
 	requireStatus(t, resp, 200)
+	assert.Equal(t, "application/octet-stream", resp.Headers["Content-Type"])
 
-	var response struct {
-		Status string `json:"status"`
-		Value  string `json:"value"`
-	}
-	parseJSONResponse(t, resp.Body, &response)
-
-	assert.Equal(t, "success", response.Status)
-	expectedLen := 10 * 80 * 2 // 10 headers * 80 bytes * 2 hex chars
-	assert.Len(t, response.Value, expectedLen)
+	expectedLen := 10 * 80 // 10 headers * 80 bytes
+	assert.Len(t, resp.Body, expectedLen)
 }
 
 func TestHandleGetHeaders_MissingParams(t *testing.T) {

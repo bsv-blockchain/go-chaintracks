@@ -64,8 +64,8 @@ func (cm *ChainManager) loadFromLocalFiles(ctx context.Context) error {
 	log.Printf("Loading checkpoint metadata from: %s", metadataPath)
 
 	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
-		log.Printf("No checkpoint files found at %s, starting with empty chain", metadataPath)
-		return nil
+		log.Printf("No persisted chain state found, initializing from genesis block")
+		return cm.initializeFromGenesis(ctx)
 	}
 
 	metadata, err := parseMetadata(metadataPath)
@@ -124,6 +124,28 @@ func (cm *ChainManager) loadFromLocalFiles(ctx context.Context) error {
 		}
 	}
 
+	return nil
+}
+
+// initializeFromGenesis sets up the chain with just the genesis block for the configured network.
+func (cm *ChainManager) initializeFromGenesis(ctx context.Context) error {
+	header, err := getGenesisHeader(cm.network)
+	if err != nil {
+		return fmt.Errorf("failed to get genesis header: %w", err)
+	}
+
+	genesis := &chaintracks.BlockHeader{
+		Header:    header,
+		Height:    0,
+		Hash:      header.Hash(),
+		ChainWork: big.NewInt(0),
+	}
+
+	if err := cm.SetChainTip(ctx, []*chaintracks.BlockHeader{genesis}); err != nil {
+		return fmt.Errorf("failed to set genesis as chain tip: %w", err)
+	}
+
+	log.Printf("Initialized from genesis block: %s", genesis.Hash.String())
 	return nil
 }
 

@@ -162,6 +162,7 @@ func (r *Routes) handleGetTip(c *fiber.Ctx) error {
 	if tip == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chain tip not found"})
 	}
+	c.Set("X-Block-Height", strconv.FormatUint(uint64(tip.Height), 10))
 	return c.JSON(tip)
 }
 
