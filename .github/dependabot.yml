@@ -39,6 +39,9 @@ updates:
       timezone: "America/New_York"
     allow:
       - dependency-type: "direct"
+    ignore:
+      - dependency-name: "github.com/libp2p/go-libp2p"
+        versions: ["v6.0.23+incompatible"]
     groups:
       security-deps:
         patterns:
