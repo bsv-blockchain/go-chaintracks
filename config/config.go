@@ -22,6 +22,7 @@ func (c *Config) SetDefaults(v *viper.Viper, configPath string) {
 	}
 	v.SetDefault(prefix+"mode", "embedded")
 	v.SetDefault(prefix+"storage_path", "~/.chaintracks")
+	v.SetDefault(prefix+"bootstrap_url", "")
 	c.P2P.SetDefaults(v, prefix+"p2p")
 }
 

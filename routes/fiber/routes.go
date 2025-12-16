@@ -44,29 +44,15 @@ type Routes struct {
 	tipChan      <-chan *chaintracks.BlockHeader
 }
 
-// NewRoutes creates a new Routes instance.
-func NewRoutes(cm chaintracks.Chaintracks) *Routes {
-	return &Routes{
+// NewRoutes creates a new Routes instance and starts broadcasting tip updates to SSE clients.
+// The context is used for cancellation - when cancelled, the broadcast goroutine will stop.
+func NewRoutes(ctx context.Context, cm chaintracks.Chaintracks) *Routes {
+	r := &Routes{
 		cm:         cm,
 		sseClients: make(map[int64]*bufio.Writer),
 	}
-}
 
-// Register registers all chaintracks routes on the given router.
-// Routes are registered at the root level of the provided router.
-func (r *Routes) Register(router fiber.Router) {
-	router.Get("/network", r.handleGetNetwork)
-	router.Get("/height", r.handleGetHeight)
-	router.Get("/tip", r.handleGetTip)
-	router.Get("/tip/stream", r.handleTipStream)
-	router.Get("/header/height/:height", r.handleGetHeaderByHeight)
-	router.Get("/header/hash/:hash", r.handleGetHeaderByHash)
-	router.Get("/headers", r.handleGetHeaders)
-}
-
-// StartBroadcasting starts broadcasting tip updates to SSE clients.
-// Call this after starting the ChainManager to receive tip updates.
-func (r *Routes) StartBroadcasting(ctx context.Context, tipChan <-chan *chaintracks.BlockHeader) {
+	tipChan := cm.Subscribe(ctx)
 	r.tipChan = tipChan
 	go func() {
 		for {
@@ -83,7 +69,22 @@ func (r *Routes) StartBroadcasting(ctx context.Context, tipChan <-chan *chaintra
 			}
 		}
 	}()
+
+	return r
 }
+
+// Register registers all chaintracks routes on the given router.
+// Routes are registered at the root level of the provided router.
+func (r *Routes) Register(router fiber.Router) {
+	router.Get("/network", r.handleGetNetwork)
+	router.Get("/height", r.handleGetHeight)
+	router.Get("/tip", r.handleGetTip)
+	router.Get("/tip/stream", r.handleTipStream)
+	router.Get("/header/height/:height", r.handleGetHeaderByHeight)
+	router.Get("/header/hash/:hash", r.handleGetHeaderByHash)
+	router.Get("/headers", r.handleGetHeaders)
+}
+
 
 func (r *Routes) broadcastTip(tip *chaintracks.BlockHeader) {
 	data, err := json.Marshal(tip)
@@ -127,7 +128,7 @@ func (r *Routes) broadcastTip(tip *chaintracks.BlockHeader) {
 // @Produce json
 // @Success 200 {object} NetworkResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /v2/network [get]
+// @Router /block/network [get]
 func (r *Routes) handleGetNetwork(c *fiber.Ctx) error {
 	network, err := r.cm.GetNetwork(c.UserContext())
 	if err != nil {
@@ -142,7 +143,7 @@ func (r *Routes) handleGetNetwork(c *fiber.Ctx) error {
 // @Tags chaintracks
 // @Produce json
 // @Success 200 {object} HeightResponse
-// @Router /v2/height [get]
+// @Router /block/height [get]
 func (r *Routes) handleGetHeight(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "public, max-age=60")
 	return c.JSON(fiber.Map{"height": r.cm.GetHeight(c.UserContext())})
@@ -155,7 +156,7 @@ func (r *Routes) handleGetHeight(c *fiber.Ctx) error {
 // @Produce json
 // @Success 200 {object} chaintracks.BlockHeader
 // @Failure 404 {object} ErrorResponse
-// @Router /v2/tip [get]
+// @Router /block/tip [get]
 func (r *Routes) handleGetTip(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	tip := r.cm.GetTip(c.UserContext())
@@ -172,7 +173,7 @@ func (r *Routes) handleGetTip(c *fiber.Ctx) error {
 // @Tags chaintracks
 // @Produce text/event-stream
 // @Success 200 {string} string "SSE stream of BlockHeader JSON objects"
-// @Router /v2/tip/stream [get]
+// @Router /block/tip/stream [get]
 func (r *Routes) handleTipStream(c *fiber.Ctx) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -230,7 +231,7 @@ func (r *Routes) handleTipStream(c *fiber.Ctx) error {
 // @Success 200 {object} chaintracks.BlockHeader
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /v2/header/height/{height} [get]
+// @Router /block/header/height/{height} [get]
 func (r *Routes) handleGetHeaderByHeight(c *fiber.Ctx) error {
 	height, err := strconv.ParseUint(c.Params("height"), 10, 32)
 	if err != nil {
@@ -261,7 +262,7 @@ func (r *Routes) handleGetHeaderByHeight(c *fiber.Ctx) error {
 // @Success 200 {object} chaintracks.BlockHeader
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /v2/header/hash/{hash} [get]
+// @Router /block/header/hash/{hash} [get]
 func (r *Routes) handleGetHeaderByHash(c *fiber.Ctx) error {
 	hash, err := chainhash.NewHashFromHex(c.Params("hash"))
 	if err != nil {
@@ -293,7 +294,7 @@ func (r *Routes) handleGetHeaderByHash(c *fiber.Ctx) error {
 // @Param count query int true "Number of headers to return"
 // @Success 200 {string} binary "Concatenated 80-byte headers"
 // @Failure 400 {object} ErrorResponse
-// @Router /v2/headers [get]
+// @Router /block/headers [get]
 func (r *Routes) handleGetHeaders(c *fiber.Ctx) error {
 	heightStr := c.Query("height")
 	countStr := c.Query("count")
