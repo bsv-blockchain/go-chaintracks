@@ -37,4 +37,3 @@ type CDNFileEntry struct {
 	PrevHash      chainhash.Hash `json:"prevHash"`
 	SourceURL     string         `json:"sourceUrl"`
 }
-

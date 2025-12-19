@@ -13,7 +13,7 @@ import (
 )
 
 // startBlockSubscription starts listening for P2P block announcements.
-// The subscription will automatically stop when ctx is cancelled.
+// The subscription will automatically stop when ctx is canceled.
 func (cm *ChainManager) startBlockSubscription(ctx context.Context) {
 	log.Printf("Subscribing to P2P blocks for network: %s", cm.P2PClient.GetNetwork())
 

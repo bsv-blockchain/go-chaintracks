@@ -29,11 +29,13 @@ func (c *Config) SetDefaults(v *viper.Viper, configPath string) {
 // Initialize creates and returns the appropriate chaintracks implementation.
 // Name identifies this client on the P2P network (ignored if p2pClient is provided).
 // If p2pClient is non-nil in embedded mode, it will be used instead of creating a new one.
+//
+//nolint:gocyclo // Initialization logic inherently has multiple code paths for different modes
 func (c *Config) Initialize(ctx context.Context, name string, p2pClient *p2p.Client) (chaintracks.Chaintracks, error) {
 	switch c.Mode {
 	case ModeRemote:
 		if c.URL == "" {
-			return nil, fmt.Errorf("chaintracks URL required for remote mode")
+			return nil, chaintracks.ErrChaintracksURLRequired
 		}
 		return client.New(c.URL), nil
 
@@ -68,6 +70,6 @@ func (c *Config) Initialize(ctx context.Context, name string, p2pClient *p2p.Cli
 		return chainmanager.New(ctx, p2pClient.GetNetwork(), c.StoragePath, p2pClient, c.BootstrapURL)
 
 	default:
-		return nil, fmt.Errorf("unknown chaintracks mode: %s", c.Mode)
+		return nil, fmt.Errorf("%w: %s", chaintracks.ErrUnknownChaintracksMode, c.Mode)
 	}
 }

@@ -47,7 +47,7 @@ func New(baseURL string) *Client {
 }
 
 // Subscribe returns a channel that receives tip updates.
-// Starts SSE connection on first subscriber. When ctx is cancelled, the subscription is removed.
+// Starts SSE connection on first subscriber. When ctx is canceled, the subscription is removed.
 func (c *Client) Subscribe(ctx context.Context) <-chan *chaintracks.BlockHeader {
 	ch := make(chan *chaintracks.BlockHeader, 1)
 
@@ -57,7 +57,7 @@ func (c *Client) Subscribe(ctx context.Context) <-chan *chaintracks.BlockHeader 
 	c.subMu.Unlock()
 
 	if firstSubscriber {
-		c.startSSE()
+		c.startSSE(ctx)
 	}
 
 	go func() {
@@ -88,9 +88,9 @@ func (c *Client) Unsubscribe(ch <-chan *chaintracks.BlockHeader) {
 }
 
 // startSSE starts the SSE connection and fan-out goroutine.
-func (c *Client) startSSE() {
+func (c *Client) startSSE(parentCtx context.Context) {
 	c.msgChan = make(chan *chaintracks.BlockHeader, 1)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parentCtx)
 	c.sseCancel = cancel
 
 	go c.runSSE(ctx)
@@ -315,7 +315,7 @@ func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chain
 	}
 
 	if len(data)%80 != 0 {
-		return nil, fmt.Errorf("invalid response length: %d bytes", len(data))
+		return nil, fmt.Errorf("%w: %d bytes", chaintracks.ErrInvalidResponseLength, len(data))
 	}
 
 	var headers []*chaintracks.BlockHeader
@@ -324,9 +324,10 @@ func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chain
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse header at offset %d: %w", i, err)
 		}
+		headerIndex := i / 80
 		headers = append(headers, &chaintracks.BlockHeader{
 			Header: h,
-			Height: height + uint32(i/80),
+			Height: height + uint32(headerIndex), //nolint:gosec // headerIndex is bounded by response size
 			Hash:   h.Hash(),
 		})
 	}

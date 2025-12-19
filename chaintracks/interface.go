@@ -9,7 +9,7 @@ import (
 
 // Chaintracks defines the interface for both embedded ChainManager and remote Client.
 // Both implementations start their subscriptions automatically when created via config.Initialize().
-// Cleanup happens automatically when the context passed to Initialize is cancelled.
+// Cleanup happens automatically when the context passed to Initialize is canceled.
 type Chaintracks interface {
 	// Embed the ChainTracker interface from go-sdk
 	chaintracker.ChainTracker

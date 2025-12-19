@@ -1,3 +1,4 @@
+// Package chaintracks provides core types and interfaces for blockchain header tracking.
 package chaintracks
 
 import "errors"
@@ -53,4 +54,19 @@ var (
 
 	// ErrIntegerOverflow is returned when an integer overflow would occur
 	ErrIntegerOverflow = errors.New("integer overflow in conversion")
+
+	// ErrP2PClientRequired is returned when P2P client is required but not provided
+	ErrP2PClientRequired = errors.New("p2pClient is required")
+
+	// ErrUnknownNetwork is returned when an unknown network is specified
+	ErrUnknownNetwork = errors.New("unknown network")
+
+	// ErrChaintracksURLRequired is returned when chaintracks URL is required for remote mode
+	ErrChaintracksURLRequired = errors.New("chaintracks URL required for remote mode")
+
+	// ErrUnknownChaintracksMode is returned when an unknown chaintracks mode is specified
+	ErrUnknownChaintracksMode = errors.New("unknown chaintracks mode")
+
+	// ErrInvalidResponseLength is returned when response length is invalid
+	ErrInvalidResponseLength = errors.New("invalid response length")
 )

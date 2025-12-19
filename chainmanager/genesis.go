@@ -3,10 +3,13 @@ package chainmanager
 import (
 	"fmt"
 
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/block"
 )
 
 // Genesis block headers for each network (80 bytes each).
+//
+//nolint:gochecknoglobals // Genesis block data is constant and must be global
 var (
 	genesisMainnet = []byte{
 		0x01, 0x00, 0x00, 0x00, // version
@@ -65,7 +68,7 @@ func getGenesisHeader(network string) (*block.Header, error) {
 	case "teratest":
 		data = genesisTeratestnet
 	default:
-		return nil, fmt.Errorf("unknown network: %s", network)
+		return nil, fmt.Errorf("%w: %s", chaintracks.ErrUnknownNetwork, network)
 	}
 	return block.NewHeaderFromBytes(data)
 }

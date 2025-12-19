@@ -46,7 +46,7 @@ type Routes struct {
 }
 
 // NewRoutes creates a new Routes instance and starts broadcasting tip updates to SSE clients.
-// The context is used for cancellation - when cancelled, the broadcast goroutine will stop.
+// The context is used for cancellation - when canceled, the broadcast goroutine will stop.
 func NewRoutes(ctx context.Context, cm chaintracks.Chaintracks) *Routes {
 	r := &Routes{
 		cm:         cm,
@@ -358,10 +358,15 @@ func (r *Routes) handleTipStream(c *fiber.Ctx) error {
 		}()
 
 		// Send initial tip
+		//nolint:nestif // SSE initialization requires nested error handling
 		if tip := r.cm.GetTip(ctx); tip != nil {
 			if data, err := json.Marshal(tip); err == nil {
-				fmt.Fprintf(w, "data: %s\n\n", data)
-				w.Flush()
+				if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+					return
+				}
+				if err := w.Flush(); err != nil {
+					return
+				}
 			}
 		}
 
@@ -374,7 +379,9 @@ func (r *Routes) handleTipStream(c *fiber.Ctx) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				fmt.Fprintf(w, ": keepalive\n\n")
+				if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
+					return
+				}
 				if err := w.Flush(); err != nil {
 					return
 				}

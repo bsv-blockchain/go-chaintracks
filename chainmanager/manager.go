@@ -3,13 +3,14 @@ package chainmanager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
 
 	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
-	p2p "github.com/bsv-blockchain/go-teranode-p2p-client"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
+	p2p "github.com/bsv-blockchain/go-teranode-p2p-client"
 )
 
 // ChainManager is the main orchestrator for chain management.
@@ -24,18 +25,18 @@ type ChainManager struct {
 	network          string
 
 	// P2P fields
-	P2PClient   *p2p.Client                            // P2P client for network communication
-	msgChan     chan *chaintracks.BlockHeader          // Internal channel for tip updates
+	P2PClient   *p2p.Client                   // P2P client for network communication
+	msgChan     chan *chaintracks.BlockHeader // Internal channel for tip updates
 	subscribers map[chan *chaintracks.BlockHeader]struct{}
 	subMu       sync.RWMutex
 }
 
 // New creates a new ChainManager, restores from local files, and starts the P2P subscription.
-// The subscription will automatically stop when ctx is cancelled.
+// The subscription will automatically stop when ctx is canceled.
 // If bootstrapURL is provided, it will sync from a remote teranode before returning.
 func New(ctx context.Context, network, localStoragePath string, p2pClient *p2p.Client, bootstrapURL ...string) (*ChainManager, error) {
 	if p2pClient == nil {
-		return nil, fmt.Errorf("p2pClient is required")
+		return nil, chaintracks.ErrP2PClientRequired
 	}
 
 	cm := &ChainManager{
@@ -162,12 +163,18 @@ func (cm *ChainManager) GetHeaderByHash(_ context.Context, hash *chainhash.Hash)
 }
 
 // GetHeaders retrieves multiple headers starting from the given height.
+// Returns partial results if fewer headers are available than requested.
 func (cm *ChainManager) GetHeaders(ctx context.Context, height, count uint32) ([]*chaintracks.BlockHeader, error) {
 	headers := make([]*chaintracks.BlockHeader, 0, count)
 	for i := uint32(0); i < count; i++ {
 		header, err := cm.GetHeaderByHeight(ctx, height+i)
 		if err != nil {
-			break
+			if errors.Is(err, chaintracks.ErrHeaderNotFound) {
+				// Reached the end of available headers - return partial results
+				break
+			}
+			// Propagate unexpected errors
+			return nil, err
 		}
 		headers = append(headers, header)
 	}
@@ -207,7 +214,7 @@ func (cm *ChainManager) GetNetwork(_ context.Context) (string, error) {
 }
 
 // Subscribe returns a channel that receives tip updates.
-// When ctx is cancelled, the subscription is automatically removed.
+// When ctx is canceled, the subscription is automatically removed.
 func (cm *ChainManager) Subscribe(ctx context.Context) <-chan *chaintracks.BlockHeader {
 	ch := make(chan *chaintracks.BlockHeader, 1)
 	cm.subMu.Lock()

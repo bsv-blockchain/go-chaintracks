@@ -36,7 +36,9 @@ func NewServer(ctx context.Context, ct chaintracks.Chaintracks) *Server {
 	}
 }
 
-// HandleTipStream handles SSE connections for tip updates
+// HandleTipStream handles SSE connections for tip updates.
+//
+//nolint:gocyclo,nestif // SSE streaming inherently requires multiple control paths
 func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")

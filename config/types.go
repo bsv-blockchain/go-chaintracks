@@ -8,6 +8,7 @@ import (
 // Mode specifies which chaintracks implementation to use.
 type Mode string
 
+// Chaintracks mode constants.
 const (
 	ModeEmbedded Mode = "embedded" // Run chainmanager locally
 	ModeRemote   Mode = "remote"   // Connect to remote chaintracks server
