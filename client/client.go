@@ -11,9 +11,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/block"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 // Client is an HTTP client for chaintracks server with SSE support.

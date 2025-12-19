@@ -6,10 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 const testCDNPath = "../../../chaintracks-server/public/headers"

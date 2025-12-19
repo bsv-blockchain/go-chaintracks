@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-chaintracks/config"
-	"github.com/spf13/viper"
 )
 
 // AppConfig holds all configuration for the server application.

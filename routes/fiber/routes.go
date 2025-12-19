@@ -11,10 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/gofiber/fiber/v2"
 	"github.com/valyala/fasthttp"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 // NetworkResponse represents the response for the network endpoint

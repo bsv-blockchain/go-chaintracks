@@ -3,8 +3,9 @@ package chainmanager
 import (
 	"fmt"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/block"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 // Genesis block headers for each network (80 bytes each).

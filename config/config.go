@@ -7,11 +7,12 @@ import (
 	"os"
 	"path"
 
+	p2p "github.com/bsv-blockchain/go-teranode-p2p-client"
+	"github.com/spf13/viper"
+
 	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
 	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-chaintracks/client"
-	p2p "github.com/bsv-blockchain/go-teranode-p2p-client"
-	"github.com/spf13/viper"
 )
 
 // SetDefaults sets viper defaults for chaintracks configuration when used as an embedded library.

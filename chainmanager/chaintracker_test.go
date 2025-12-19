@@ -3,11 +3,12 @@ package chainmanager
 import (
 	"testing"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/block"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 func TestChainManagerIsValidRootForHeight(t *testing.T) {

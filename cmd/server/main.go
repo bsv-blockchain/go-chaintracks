@@ -9,12 +9,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/joho/godotenv"
+
+	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 func main() {

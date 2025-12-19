@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/block"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 // loadHeadersFromFile reads a binary .headers file and returns a slice of headers.

@@ -8,9 +8,10 @@ import (
 	"log"
 	"sync"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	p2p "github.com/bsv-blockchain/go-teranode-p2p-client"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 // ChainManager is the main orchestrator for chain management.

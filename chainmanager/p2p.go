@@ -7,9 +7,10 @@ import (
 	"log"
 	"math/big"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/block"
 	teranode "github.com/bsv-blockchain/teranode/services/p2p"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 // startBlockSubscription starts listening for P2P block announcements.

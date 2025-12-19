@@ -8,9 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
 )
 
 // getConfigEnvVars returns the environment variables used for configuration

@@ -9,9 +9,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/block"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 const (

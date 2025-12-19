@@ -11,10 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/gofiber/fiber/v2"
 	"github.com/valyala/fasthttp"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 //go:embed openapi.yaml

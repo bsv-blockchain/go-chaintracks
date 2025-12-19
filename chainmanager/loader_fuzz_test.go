@@ -5,8 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 // FuzzLoadHeadersFromFile tests loadHeadersFromFile with random binary data

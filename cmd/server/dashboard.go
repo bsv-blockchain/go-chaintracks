@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
 	msgbus "github.com/bsv-blockchain/go-p2p-message-bus"
 	"github.com/gofiber/fiber/v2"
+
+	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
 )
 
 // DashboardHandler serves a simple status dashboard
