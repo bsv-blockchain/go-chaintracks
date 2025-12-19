@@ -11,7 +11,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bsv-blockchain/go-chaintracks/pkg/chaintracks"
+	"github.com/bsv-blockchain/go-chaintracks/chainmanager"
 )
 
 // getConfigEnvVars returns the environment variables used for configuration
@@ -59,18 +59,16 @@ func withEnvVars(t *testing.T, vars map[string]string) func() {
 }
 
 // setupTestApp creates a test Fiber app with all routes configured.
-// P2P client is nil since tests don't call Start() - avoids slow network initialization.
-func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
+func setupTestApp(t *testing.T) (*fiber.App, *chainmanager.ChainManager) {
 	t.Helper()
 
 	ctx := t.Context()
 
-	// Create temp directory and copy checkpoint files
+	// Create temp directory and copy test data files
 	tempDir := t.TempDir()
-	copyCheckpointFiles(t, "../../data/headers", tempDir, "main")
+	copyTestData(t, "testdata", tempDir)
 
-	// Pass nil for p2pClient - it's only used when Start() is called
-	cm, err := chaintracks.NewChainManager(ctx, "main", tempDir, nil, "")
+	cm, err := chainmanager.NewForTesting(ctx, "main", tempDir)
 	require.NoError(t, err, "Failed to create chain manager")
 
 	server := NewServer(ctx, cm)
@@ -80,22 +78,20 @@ func setupTestApp(t *testing.T) (*fiber.App, *chaintracks.ChainManager) {
 	return app, cm
 }
 
-// copyCheckpointFiles copies checkpoint header files to a temp directory
-func copyCheckpointFiles(t *testing.T, srcDir, dstDir, network string) {
+// copyTestData copies all files from srcDir to dstDir.
+func copyTestData(t *testing.T, srcDir, dstDir string) {
 	t.Helper()
 
-	files, err := filepath.Glob(filepath.Join(srcDir, network+"*"))
-	if err != nil || len(files) == 0 {
-		return
-	}
+	files, err := filepath.Glob(filepath.Join(srcDir, "*"))
+	require.NoError(t, err, "Failed to glob testdata")
 
 	for _, srcFile := range files {
-		data, err := os.ReadFile(srcFile) //nolint:gosec // Test helper reading from known checkpoint directory
-		require.NoError(t, err, "Failed to read checkpoint file")
+		data, err := os.ReadFile(srcFile) //nolint:gosec // Test helper reading from known testdata directory
+		require.NoError(t, err, "Failed to read testdata file")
 
 		dstFile := filepath.Join(dstDir, filepath.Base(srcFile))
 		err = os.WriteFile(dstFile, data, 0o600)
-		require.NoError(t, err, "Failed to write checkpoint file")
+		require.NoError(t, err, "Failed to write testdata file")
 	}
 }
 

@@ -1,0 +1,19 @@
+{
+    "files": [
+        {
+            "chain": "main",
+            "count": 100000,
+            "fileHash": "DMXYETHMphmYRh5y0+qsJhj67ML5Ui4LE1eEZDYbnZE=",
+            "fileName": "mainnet_0.headers",
+            "firstHeight": 0,
+            "lastChainWork": "000000000000000000000000000000000000000000000000064492e9f00e251f",
+            "lastHash": "000000000002d01c1fccc21636b607dfd930d31d01c3a62104612a1719011250",
+            "prevChainWork": "00000000000000000000000000000000000000000000000006445a558de941a1",
+            "prevHash": "0000000000002103637910d267190996687fb095880d432c6531a527c8ec53d1",
+            "sourceUrl": ""
+        }
+    ],
+    "headersPerFile": 100000,
+    "jsonFilename": "mainNetBlockHeaders.json",
+    "rootFolder": ""
+}

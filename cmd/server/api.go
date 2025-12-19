@@ -5,124 +5,58 @@ import (
 	"bufio"
 	"context"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/gofiber/fiber/v2"
 	"github.com/valyala/fasthttp"
 
-	"github.com/bsv-blockchain/go-chaintracks/pkg/chaintracks"
+	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
 //go:embed openapi.yaml
 var openapiSpec string
 
-// Server wraps the ChainManager with Fiber handlers
+// Server wraps the Chaintracks interface with Fiber handlers
 //
 //nolint:containedctx // Context stored for SSE stream shutdown detection
 type Server struct {
-	ctx          context.Context
-	cm           *chaintracks.ChainManager
-	sseClients   map[int64]*bufio.Writer
-	sseClientsMu sync.RWMutex
+	ctx context.Context
+	ct  chaintracks.Chaintracks
 }
 
 // NewServer creates a new API server
-func NewServer(ctx context.Context, cm *chaintracks.ChainManager) *Server {
+func NewServer(ctx context.Context, ct chaintracks.Chaintracks) *Server {
 	return &Server{
-		ctx:        ctx,
-		cm:         cm,
-		sseClients: make(map[int64]*bufio.Writer),
+		ctx: ctx,
+		ct:  ct,
 	}
 }
 
-// StartBroadcasting listens to ChainManager tip changes and broadcasts to all SSE clients
-func (s *Server) StartBroadcasting(ctx context.Context, tipChan <-chan *chaintracks.BlockHeader) {
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case tip := <-tipChan:
-				if tip == nil {
-					continue
-				}
-				s.broadcastTip(tip)
-			}
-		}
-	}()
-}
-
-// broadcastTip sends a tip update to all connected SSE clients
-func (s *Server) broadcastTip(tip *chaintracks.BlockHeader) {
-	data, err := json.Marshal(tip)
-	if err != nil {
-		return
-	}
-
-	sseMessage := fmt.Sprintf("data: %s\n\n", string(data))
-
-	s.sseClientsMu.RLock()
-	clientsCopy := make(map[int64]*bufio.Writer, len(s.sseClients))
-	for id, writer := range s.sseClients {
-		clientsCopy[id] = writer
-	}
-	s.sseClientsMu.RUnlock()
-
-	var failedClients []int64
-	for id, writer := range clientsCopy {
-		if _, err := fmt.Fprint(writer, sseMessage); err != nil {
-			failedClients = append(failedClients, id)
-			continue
-		}
-		if err := writer.Flush(); err != nil {
-			failedClients = append(failedClients, id)
-		}
-	}
-
-	if len(failedClients) > 0 {
-		s.sseClientsMu.Lock()
-		for _, id := range failedClients {
-			delete(s.sseClients, id)
-		}
-		s.sseClientsMu.Unlock()
-	}
-}
-
-// HandleTipStream handles SSE connections for tip updates
+// HandleTipStream handles SSE connections for tip updates.
+//
+//nolint:gocyclo,nestif // SSE streaming inherently requires multiple control paths
 func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 	c.Set("Transfer-Encoding", "chunked")
 
-	// Capture context before entering stream writer
-	ctx := c.UserContext()
-
 	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
-		clientID := time.Now().UnixNano()
+		// Create a context that cancels when the client disconnects
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer cancel()
 
-		s.sseClientsMu.Lock()
-		s.sseClients[clientID] = w
-		s.sseClientsMu.Unlock()
-
-		defer func() {
-			s.sseClientsMu.Lock()
-			delete(s.sseClients, clientID)
-			s.sseClientsMu.Unlock()
-		}()
+		// Subscribe to tip updates
+		tipChan := s.ct.Subscribe(ctx)
 
 		// Send initial tip
-		tip := s.cm.GetTip(ctx)
-		if tip != nil { //nolint:nestif // SSE stream initialization logic
-
-			data, err := json.Marshal(tip)
-			if err == nil {
+		if tip := s.ct.GetTip(ctx); tip != nil {
+			if data, err := json.Marshal(tip); err == nil {
 				if _, writeErr := fmt.Fprintf(w, "data: %s\n\n", string(data)); writeErr != nil {
 					return
 				}
@@ -138,8 +72,20 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 
 		for {
 			select {
-			case <-s.ctx.Done():
+			case <-ctx.Done():
 				return
+			case tip := <-tipChan:
+				if tip == nil {
+					continue
+				}
+				if data, err := json.Marshal(tip); err == nil {
+					if _, writeErr := fmt.Fprintf(w, "data: %s\n\n", string(data)); writeErr != nil {
+						return
+					}
+					if flushErr := w.Flush(); flushErr != nil {
+						return
+					}
+				}
 			case <-ticker.C:
 				if _, writeErr := fmt.Fprintf(w, ": keepalive\n\n"); writeErr != nil {
 					return
@@ -178,7 +124,7 @@ func (s *Server) HandleRobots(c *fiber.Ctx) error {
 
 // HandleGetNetwork returns the network name
 func (s *Server) HandleGetNetwork(c *fiber.Ctx) error {
-	network, err := s.cm.GetNetwork(c.UserContext())
+	network, err := s.ct.GetNetwork(c.UserContext())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(Response{
 			Status: "error",
@@ -191,40 +137,11 @@ func (s *Server) HandleGetNetwork(c *fiber.Ctx) error {
 	})
 }
 
-// HandleGetHeight returns the current blockchain height
-func (s *Server) HandleGetHeight(c *fiber.Ctx) error {
-	c.Set("Cache-Control", "public, max-age=60")
-	return c.JSON(Response{
-		Status: "success",
-		Value:  s.cm.GetHeight(c.UserContext()),
-	})
-}
-
-// HandleGetTipHash returns the chain tip hash
-func (s *Server) HandleGetTipHash(c *fiber.Ctx) error {
+// HandleGetTip returns the chain tip header
+func (s *Server) HandleGetTip(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 
-	tip := s.cm.GetTip(c.UserContext())
-	if tip == nil {
-		return c.Status(fiber.StatusNotFound).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_NO_TIP",
-			Description: "Chain tip not found",
-		})
-	}
-
-	hash := tip.Header.Hash()
-	return c.JSON(Response{
-		Status: "success",
-		Value:  &hash,
-	})
-}
-
-// HandleGetTipHeader returns the full chain tip header
-func (s *Server) HandleGetTipHeader(c *fiber.Ctx) error {
-	c.Set("Cache-Control", "no-cache")
-
-	tip := s.cm.GetTip(c.UserContext())
+	tip := s.ct.GetTip(c.UserContext())
 	if tip == nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
@@ -259,14 +176,14 @@ func (s *Server) HandleGetHeaderByHeight(c *fiber.Ctx) error {
 		})
 	}
 
-	tip := s.cm.GetHeight(c.UserContext())
+	tip := s.ct.GetHeight(c.UserContext())
 	if uint32(height) < tip-100 {
 		c.Set("Cache-Control", "public, max-age=3600")
 	} else {
 		c.Set("Cache-Control", "no-cache")
 	}
 
-	header, err := s.cm.GetHeaderByHeight(c.UserContext(), uint32(height))
+	header, err := s.ct.GetHeaderByHeight(c.UserContext(), uint32(height))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
@@ -301,7 +218,7 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 		})
 	}
 
-	header, err := s.cm.GetHeaderByHash(c.UserContext(), hash)
+	header, err := s.ct.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
@@ -310,7 +227,7 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 		})
 	}
 
-	tip := s.cm.GetHeight(c.UserContext())
+	tip := s.ct.GetHeight(c.UserContext())
 	if header.Height < tip-100 {
 		c.Set("Cache-Control", "public, max-age=3600")
 	} else {
@@ -354,29 +271,184 @@ func (s *Server) HandleGetHeaders(c *fiber.Ctx) error {
 		})
 	}
 
-	tip := s.cm.GetHeight(c.UserContext())
+	tip := s.ct.GetHeight(c.UserContext())
 	if uint32(height) < tip-100 {
 		c.Set("Cache-Control", "public, max-age=3600")
 	} else {
 		c.Set("Cache-Control", "no-cache")
 	}
 
-	var hexData string
+	var data []byte
 	for i := uint32(0); i < uint32(count); i++ {
-		h := uint32(height) + i
-		header, err := s.cm.GetHeaderByHeight(c.UserContext(), h)
+		header, err := s.ct.GetHeaderByHeight(c.UserContext(), uint32(height)+i)
 		if err != nil {
 			break
 		}
-
-		headerBytes := header.Bytes()
-		hexData += hex.EncodeToString(headerBytes)
+		data = append(data, header.Bytes()...)
 	}
 
-	return c.JSON(Response{
-		Status: "success",
-		Value:  hexData,
-	})
+	c.Set("Content-Type", "application/octet-stream")
+	return c.Send(data)
+}
+
+// HandleGetTipBinary returns the chain tip as 80-byte binary with height in X-Block-Height header
+func (s *Server) HandleGetTipBinary(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Content-Type", "application/octet-stream")
+
+	tip := s.ct.GetTip(c.UserContext())
+	if tip == nil {
+		return c.Status(fiber.StatusNotFound).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_NO_TIP",
+			Description: "Chain tip not found",
+		})
+	}
+
+	c.Set("X-Block-Height", strconv.FormatUint(uint64(tip.Height), 10))
+	return c.Send(tip.Bytes())
+}
+
+// HandleGetHeaderByHeightBinary returns a header by height as 80-byte binary with height in X-Block-Height header
+func (s *Server) HandleGetHeaderByHeightBinary(c *fiber.Ctx) error {
+	heightStr := c.Params("height")
+	// Remove .bin suffix if present in the param
+	heightStr = strings.TrimSuffix(heightStr, ".bin")
+	if heightStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_INVALID_PARAMS",
+			Description: "Missing height parameter",
+		})
+	}
+
+	height, err := strconv.ParseUint(heightStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_INVALID_PARAMS",
+			Description: "Invalid height parameter",
+		})
+	}
+
+	tip := s.ct.GetHeight(c.UserContext())
+	if uint32(height) < tip-100 {
+		c.Set("Cache-Control", "public, max-age=3600")
+	} else {
+		c.Set("Cache-Control", "no-cache")
+	}
+
+	header, err := s.ct.GetHeaderByHeight(c.UserContext(), uint32(height))
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_NOT_FOUND",
+			Description: "Header not found at height " + heightStr,
+		})
+	}
+
+	c.Set("Content-Type", "application/octet-stream")
+	c.Set("X-Block-Height", strconv.FormatUint(uint64(header.Height), 10))
+	return c.Send(header.Bytes())
+}
+
+// HandleGetHeaderByHashBinary returns a header by hash as 80-byte binary with height in X-Block-Height header
+func (s *Server) HandleGetHeaderByHashBinary(c *fiber.Ctx) error {
+	hashStr := c.Params("hash")
+	// Remove .bin suffix if present in the param
+	hashStr = strings.TrimSuffix(hashStr, ".bin")
+	if hashStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_INVALID_PARAMS",
+			Description: "Missing hash parameter",
+		})
+	}
+
+	hash, err := chainhash.NewHashFromHex(hashStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_INVALID_PARAMS",
+			Description: "Invalid hash parameter",
+		})
+	}
+
+	header, err := s.ct.GetHeaderByHash(c.UserContext(), hash)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_NOT_FOUND",
+			Description: "Header not found for hash " + hashStr,
+		})
+	}
+
+	tip := s.ct.GetHeight(c.UserContext())
+	if header.Height < tip-100 {
+		c.Set("Cache-Control", "public, max-age=3600")
+	} else {
+		c.Set("Cache-Control", "no-cache")
+	}
+
+	c.Set("Content-Type", "application/octet-stream")
+	c.Set("X-Block-Height", strconv.FormatUint(uint64(header.Height), 10))
+	return c.Send(header.Bytes())
+}
+
+// HandleGetHeadersBinary returns multiple headers as binary (80 bytes each)
+// X-Start-Height header contains the starting height, headers are sequential from there
+func (s *Server) HandleGetHeadersBinary(c *fiber.Ctx) error {
+	heightStr := c.Query("height")
+	countStr := c.Query("count")
+
+	if heightStr == "" || countStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_INVALID_PARAMS",
+			Description: "Missing height or count parameter",
+		})
+	}
+
+	height, err := strconv.ParseUint(heightStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_INVALID_PARAMS",
+			Description: "Invalid height parameter",
+		})
+	}
+
+	count, err := strconv.ParseUint(countStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_INVALID_PARAMS",
+			Description: "Invalid count parameter",
+		})
+	}
+
+	tip := s.ct.GetHeight(c.UserContext())
+	if uint32(height) < tip-100 {
+		c.Set("Cache-Control", "public, max-age=3600")
+	} else {
+		c.Set("Cache-Control", "no-cache")
+	}
+
+	var data []byte
+	var headerCount uint32
+	for i := uint32(0); i < uint32(count); i++ {
+		header, err := s.ct.GetHeaderByHeight(c.UserContext(), uint32(height)+i)
+		if err != nil {
+			break
+		}
+		data = append(data, header.Bytes()...)
+		headerCount++
+	}
+
+	c.Set("Content-Type", "application/octet-stream")
+	c.Set("X-Start-Height", strconv.FormatUint(height, 10))
+	c.Set("X-Header-Count", strconv.FormatUint(uint64(headerCount), 10))
+	return c.Send(data)
 }
 
 // HandleOpenAPISpec serves the OpenAPI specification
@@ -424,13 +496,176 @@ func (s *Server) SetupRoutes(app *fiber.App, dashboard *DashboardHandler) {
 	app.Get("/docs", s.HandleSwaggerUI)
 	app.Get("/openapi.yaml", s.HandleOpenAPISpec)
 
+	// V2 routes (RESTful API)
 	v2 := app.Group("/v2")
 	v2.Get("/network", s.HandleGetNetwork)
-	v2.Get("/height", s.HandleGetHeight)
-	v2.Get("/tip/hash", s.HandleGetTipHash)
-	v2.Get("/tip/header", s.HandleGetTipHeader)
+	v2.Get("/tip", s.HandleGetTip)
 	v2.Get("/tip/stream", s.HandleTipStream)
 	v2.Get("/header/height/:height", s.HandleGetHeaderByHeight)
 	v2.Get("/header/hash/:hash", s.HandleGetHeaderByHash)
 	v2.Get("/headers", s.HandleGetHeaders)
+
+	// V2 binary routes (84 bytes per header: 4-byte height LE + 80-byte header)
+	v2.Get("/tip.bin", s.HandleGetTipBinary)
+	v2.Get("/header/height/:height.bin", s.HandleGetHeaderByHeightBinary)
+	v2.Get("/header/hash/:hash.bin", s.HandleGetHeaderByHashBinary)
+	v2.Get("/headers.bin", s.HandleGetHeadersBinary)
+
+	// Legacy v1 routes (RPC-style API for backwards compatibility)
+	s.SetupLegacyRoutes(app)
+}
+
+// LegacyResponse represents the standard v1 API response format
+type LegacyResponse struct {
+	Status      string      `json:"status"`
+	Value       interface{} `json:"value,omitempty"`
+	Code        string      `json:"code,omitempty"`
+	Description string      `json:"description,omitempty"`
+}
+
+func legacySuccess(value interface{}) LegacyResponse {
+	return LegacyResponse{Status: "success", Value: value}
+}
+
+func legacyError(code, description string) LegacyResponse {
+	return LegacyResponse{Status: "error", Code: code, Description: description}
+}
+
+// SetupLegacyRoutes configures v1-compatible routes (RPC-style endpoints)
+func (s *Server) SetupLegacyRoutes(app *fiber.App) {
+	app.Get("/getChain", s.HandleLegacyGetChain)
+	app.Get("/getPresentHeight", s.HandleLegacyGetPresentHeight)
+	app.Get("/findChainTipHashHex", s.HandleLegacyFindChainTipHashHex)
+	app.Get("/findChainTipHeaderHex", s.HandleLegacyFindChainTipHeaderHex)
+	app.Get("/findHeaderHexForHeight", s.HandleLegacyFindHeaderHexForHeight)
+	app.Get("/findHeaderHexForBlockHash", s.HandleLegacyFindHeaderHexForBlockHash)
+	app.Get("/getHeaders", s.HandleLegacyGetHeaders)
+}
+
+// HandleLegacyGetChain returns the network name in legacy format
+func (s *Server) HandleLegacyGetChain(c *fiber.Ctx) error {
+	network, err := s.ct.GetNetwork(c.UserContext())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(legacyError("ERR_INTERNAL", err.Error()))
+	}
+	return c.JSON(legacySuccess(network))
+}
+
+// HandleLegacyGetPresentHeight returns the current chain height in legacy format
+func (s *Server) HandleLegacyGetPresentHeight(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-cache")
+	return c.JSON(legacySuccess(s.ct.GetHeight(c.UserContext())))
+}
+
+// HandleLegacyFindChainTipHashHex returns just the chain tip hash
+func (s *Server) HandleLegacyFindChainTipHashHex(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-cache")
+	tip := s.ct.GetTip(c.UserContext())
+	if tip == nil {
+		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NO_TIP", "Chain tip not found"))
+	}
+	return c.JSON(legacySuccess(tip.Hash.String()))
+}
+
+// HandleLegacyFindChainTipHeaderHex returns the chain tip header in legacy format
+func (s *Server) HandleLegacyFindChainTipHeaderHex(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-cache")
+	tip := s.ct.GetTip(c.UserContext())
+	if tip == nil {
+		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NO_TIP", "Chain tip not found"))
+	}
+	return c.JSON(legacySuccess(tip))
+}
+
+// HandleLegacyFindHeaderHexForHeight returns a header by height using query param
+func (s *Server) HandleLegacyFindHeaderHexForHeight(c *fiber.Ctx) error {
+	heightStr := c.Query("height")
+	if heightStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Missing height parameter"))
+	}
+
+	height, err := strconv.ParseUint(heightStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid height parameter"))
+	}
+
+	ctx := c.UserContext()
+	tip := s.ct.GetHeight(ctx)
+	if uint32(height) < tip-100 {
+		c.Set("Cache-Control", "public, max-age=3600")
+	} else {
+		c.Set("Cache-Control", "no-cache")
+	}
+
+	header, err := s.ct.GetHeaderByHeight(ctx, uint32(height))
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", "Header not found at height "+heightStr))
+	}
+	return c.JSON(legacySuccess(header))
+}
+
+// HandleLegacyFindHeaderHexForBlockHash returns a header by hash using query param
+func (s *Server) HandleLegacyFindHeaderHexForBlockHash(c *fiber.Ctx) error {
+	hashStr := c.Query("hash")
+	if hashStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Missing hash parameter"))
+	}
+
+	hash, err := chainhash.NewHashFromHex(hashStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid hash parameter"))
+	}
+
+	ctx := c.UserContext()
+	header, err := s.ct.GetHeaderByHash(ctx, hash)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", "Header not found for hash "+hashStr))
+	}
+
+	tip := s.ct.GetHeight(ctx)
+	if header.Height < tip-100 {
+		c.Set("Cache-Control", "public, max-age=3600")
+	} else {
+		c.Set("Cache-Control", "no-cache")
+	}
+
+	return c.JSON(legacySuccess(header))
+}
+
+// HandleLegacyGetHeaders returns multiple headers as hex string in legacy format
+func (s *Server) HandleLegacyGetHeaders(c *fiber.Ctx) error {
+	heightStr := c.Query("height")
+	countStr := c.Query("count")
+	if heightStr == "" || countStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Missing height or count parameter"))
+	}
+
+	height, err := strconv.ParseUint(heightStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid height parameter"))
+	}
+	count, err := strconv.ParseUint(countStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid count parameter"))
+	}
+
+	ctx := c.UserContext()
+	tip := s.ct.GetHeight(ctx)
+	if uint32(height) < tip-100 {
+		c.Set("Cache-Control", "public, max-age=3600")
+	} else {
+		c.Set("Cache-Control", "no-cache")
+	}
+
+	var data []byte
+	for i := uint32(0); i < uint32(count); i++ {
+		header, err := s.ct.GetHeaderByHeight(ctx, uint32(height)+i)
+		if err != nil {
+			break
+		}
+		data = append(data, header.Bytes()...)
+	}
+
+	// Return as hex string wrapped in legacy response
+	return c.JSON(legacySuccess(fmt.Sprintf("%x", data)))
 }

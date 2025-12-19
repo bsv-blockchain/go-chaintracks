@@ -1,0 +1,19 @@
+# Chaintracks Server Configuration
+# Environment variables can override any setting using CHAINTRACKS_ prefix
+# Example: CHAINTRACKS_PORT=8080 overrides port
+
+# HTTP server port
+port: 3011
+
+chaintracks:
+  # Mode: "embedded" runs chainmanager locally, "remote" connects to a chaintracks server
+  mode: embedded
+
+  # Storage path for blockchain data (embedded mode)
+  storage_path: ~/.chaintracks
+
+  # Remote server URL (required for remote mode)
+  # url: http://localhost:3011
+
+  # Bootstrap URL for initial header sync (embedded mode)
+  # bootstrap_url: https://example.com/headers.bin
