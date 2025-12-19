@@ -18,6 +18,8 @@ replace github.com/bsv-blockchain/go-teranode-p2p-client => github.com/shruggr/g
 
 replace github.com/bsv-blockchain/teranode => github.com/bsv-blockchain/teranode v0.13.0-beta-3.0.20251211185306-7879a2f59199
 
+replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.2.5
+
 require (
 	github.com/IBM/sarama v1.46.3 // indirect
 	github.com/aerospike/aerospike-client-go/v8 v8.5.0 // indirect
