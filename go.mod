@@ -14,7 +14,7 @@ require (
 	github.com/valyala/fasthttp v1.68.0
 )
 
-replace github.com/bsv-blockchain/go-teranode-p2p-client => ../go-teranode-p2p-client
+replace github.com/bsv-blockchain/go-teranode-p2p-client => github.com/shruggr/go-teranode-p2p-client v0.0.0-20251219052644-3b9eba1f195f
 
 replace github.com/bsv-blockchain/teranode => github.com/bsv-blockchain/teranode v0.13.0-beta-3.0.20251211185306-7879a2f59199
 
