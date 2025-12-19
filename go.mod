@@ -3,8 +3,10 @@ module github.com/bsv-blockchain/go-chaintracks
 go 1.25.4
 
 require (
+	github.com/bsv-blockchain/go-p2p-message-bus v0.1.7
 	github.com/bsv-blockchain/go-sdk v1.2.13
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.0.0
+	github.com/bsv-blockchain/teranode v0.0.0
 	github.com/gofiber/fiber/v2 v2.52.10
 	github.com/joho/godotenv v1.6.0-pre.2
 	github.com/spf13/viper v1.20.1
@@ -46,12 +48,10 @@ require (
 	github.com/bsv-blockchain/go-bt/v2 v2.5.1 // indirect
 	github.com/bsv-blockchain/go-chaincfg v1.4.0 // indirect
 	github.com/bsv-blockchain/go-lockfree-queue v1.0.0 // indirect
-	github.com/bsv-blockchain/go-p2p-message-bus v0.1.7 // indirect
 	github.com/bsv-blockchain/go-safe-conversion v1.1.0 // indirect
 	github.com/bsv-blockchain/go-subtree v1.1.2 // indirect
 	github.com/bsv-blockchain/go-tx-map v1.2.1 // indirect
 	github.com/bsv-blockchain/go-wire v1.0.6 // indirect
-	github.com/bsv-blockchain/teranode v0.0.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -69,7 +69,6 @@ require (
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/filecoin-project/go-clock v0.1.0 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
-	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -121,7 +120,7 @@ require (
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
 	github.com/libp2p/go-cidranger v1.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.3.0 // indirect
-	github.com/libp2p/go-libp2p v0.45.0 // indirect
+	github.com/libp2p/go-libp2p v0.46.0 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.4.1 // indirect
 	github.com/libp2p/go-libp2p-kad-dht v0.36.0 // indirect
 	github.com/libp2p/go-libp2p-kbucket v0.8.0 // indirect
@@ -194,8 +193,8 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.4 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
-	github.com/quic-go/qpack v0.5.1 // indirect
-	github.com/quic-go/quic-go v0.55.0 // indirect
+	github.com/quic-go/qpack v0.6.0 // indirect
+	github.com/quic-go/quic-go v0.57.1 // indirect
 	github.com/quic-go/webtransport-go v0.9.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
