@@ -20,6 +20,8 @@ replace github.com/bsv-blockchain/teranode => github.com/bsv-blockchain/teranode
 
 replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.4.0
 
+replace github.com/bsv-blockchain/go-sdk => github.com/bsv-blockchain/go-sdk v1.2.15-0.20251229224150-16c656d138fd
+
 require (
 	github.com/IBM/sarama v1.46.3 // indirect
 	github.com/aerospike/aerospike-client-go/v8 v8.5.0 // indirect
