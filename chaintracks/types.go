@@ -37,3 +37,21 @@ type CDNFileEntry struct {
 	PrevHash      chainhash.Hash `json:"prevHash"`
 	SourceURL     string         `json:"sourceUrl"`
 }
+
+// ReorgEvent represents a chain reorganization event.
+// The primary payload is OrphanedHashes - a slice of block hashes that are no longer on the main chain.
+// Consumers should use this to invalidate any data (merkle paths, etc.) referencing these blocks.
+type ReorgEvent struct {
+	// OrphanedHashes lists the hashes of blocks no longer on the main chain.
+	// These are the blocks that were replaced during the reorg.
+	OrphanedHashes []chainhash.Hash `json:"orphanedHashes"`
+
+	// CommonAncestor is the fork point where the chains diverged.
+	CommonAncestor *BlockHeader `json:"commonAncestor"`
+
+	// NewTip is the chain tip after the reorg.
+	NewTip *BlockHeader `json:"newTip"`
+
+	// Depth is the number of blocks that were replaced (length of OrphanedHashes).
+	Depth uint32 `json:"depth"`
+}

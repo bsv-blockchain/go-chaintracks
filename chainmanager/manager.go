@@ -30,6 +30,10 @@ type ChainManager struct {
 	msgChan     chan *chaintracks.BlockHeader // Internal channel for tip updates
 	subscribers map[chan *chaintracks.BlockHeader]struct{}
 	subMu       sync.RWMutex
+
+	reorgMsgChan     chan *chaintracks.ReorgEvent
+	reorgSubscribers map[chan *chaintracks.ReorgEvent]struct{}
+	reorgSubMu       sync.RWMutex
 }
 
 // New creates a new ChainManager, restores from local files, and starts the P2P subscription.
@@ -48,6 +52,8 @@ func New(ctx context.Context, network, localStoragePath string, p2pClient *p2p.C
 		P2PClient:        p2pClient,
 		msgChan:          make(chan *chaintracks.BlockHeader, 1),
 		subscribers:      make(map[chan *chaintracks.BlockHeader]struct{}),
+		reorgMsgChan:     make(chan *chaintracks.ReorgEvent, 1),
+		reorgSubscribers: make(map[chan *chaintracks.ReorgEvent]struct{}),
 	}
 
 	log.Printf("ChainManager initializing: network=%s, path=%s", network, localStoragePath)
@@ -65,8 +71,9 @@ func New(ctx context.Context, network, localStoragePath string, p2pClient *p2p.C
 	// Start P2P block subscription
 	cm.startBlockSubscription(ctx)
 
-	// Start fan-out goroutine to broadcast tip updates to subscribers
+	// Start fan-out goroutine to broadcast tip updates and reorg events to subscribers
 	go cm.fanOut(ctx)
+	go cm.reorgFanOut(ctx)
 
 	return cm, nil
 }
@@ -80,6 +87,8 @@ func NewForTesting(ctx context.Context, network, localStoragePath string) (*Chai
 		localStoragePath: localStoragePath,
 		msgChan:          make(chan *chaintracks.BlockHeader, 1),
 		subscribers:      make(map[chan *chaintracks.BlockHeader]struct{}),
+		reorgMsgChan:     make(chan *chaintracks.ReorgEvent, 1),
+		reorgSubscribers: make(map[chan *chaintracks.ReorgEvent]struct{}),
 	}
 
 	if err := cm.loadFromLocalFiles(ctx); err != nil {
@@ -87,6 +96,7 @@ func NewForTesting(ctx context.Context, network, localStoragePath string) (*Chai
 	}
 
 	go cm.fanOut(ctx)
+	go cm.reorgFanOut(ctx)
 
 	return cm, nil
 }
@@ -102,6 +112,21 @@ func (cm *ChainManager) fanOut(ctx context.Context) {
 				return
 			}
 			cm.broadcast(header)
+		}
+	}
+}
+
+// reorgFanOut reads from reorgMsgChan and broadcasts to all subscribers.
+func (cm *ChainManager) reorgFanOut(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case reorgEvent, ok := <-cm.reorgMsgChan:
+			if !ok {
+				return
+			}
+			cm.reorgBroadcast(reorgEvent)
 		}
 	}
 }
@@ -243,6 +268,35 @@ func (cm *ChainManager) Unsubscribe(ch <-chan *chaintracks.BlockHeader) {
 	}
 }
 
+// SubscribeReorg returns a channel that receives reorg events notifications.
+// When ctx is canceled, the subscription is automatically removed.
+func (cm *ChainManager) SubscribeReorg(ctx context.Context) <-chan *chaintracks.ReorgEvent {
+	ch := make(chan *chaintracks.ReorgEvent, 1)
+	cm.reorgSubMu.Lock()
+	cm.reorgSubscribers[ch] = struct{}{}
+	cm.reorgSubMu.Unlock()
+
+	go func() {
+		<-ctx.Done()
+		cm.UnsubscribeReorg(ch)
+	}()
+
+	return ch
+}
+
+// UnsubscribeReorg removes a subscriber channel.
+func (cm *ChainManager) UnsubscribeReorg(ch <-chan *chaintracks.ReorgEvent) {
+	cm.reorgSubMu.Lock()
+	defer cm.reorgSubMu.Unlock()
+	for sub := range cm.reorgSubscribers {
+		if sub == ch {
+			delete(cm.reorgSubscribers, sub)
+			close(sub)
+			return
+		}
+	}
+}
+
 // broadcast sends a tip update to all subscribers.
 func (cm *ChainManager) broadcast(header *chaintracks.BlockHeader) {
 	cm.subMu.RLock()
@@ -250,6 +304,18 @@ func (cm *ChainManager) broadcast(header *chaintracks.BlockHeader) {
 	for ch := range cm.subscribers {
 		select {
 		case ch <- header:
+		default:
+		}
+	}
+}
+
+// reorgBroadcast sends a tip update to all subscribers.
+func (cm *ChainManager) reorgBroadcast(reorgEvent *chaintracks.ReorgEvent) {
+	cm.reorgSubMu.RLock()
+	defer cm.reorgSubMu.RUnlock()
+	for ch := range cm.reorgSubscribers {
+		select {
+		case ch <- reorgEvent:
 		default:
 		}
 	}
