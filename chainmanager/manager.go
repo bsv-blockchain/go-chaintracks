@@ -52,7 +52,7 @@ func New(ctx context.Context, network, localStoragePath string, p2pClient *p2p.C
 		P2PClient:        p2pClient,
 		msgChan:          make(chan *chaintracks.BlockHeader, 1),
 		subscribers:      make(map[chan *chaintracks.BlockHeader]struct{}),
-		reorgMsgChan:     make(chan *chaintracks.ReorgEvent, 1),
+		reorgMsgChan:     make(chan *chaintracks.ReorgEvent, 5), // in rare cases that shouldn't happen if reorg A happens, and event is not processed, reorg B happens, if we drain the channel reorg A is lost. For that case I suggest incrementing buffered channel's size and it should resolve potential issue.
 		reorgSubscribers: make(map[chan *chaintracks.ReorgEvent]struct{}),
 	}
 

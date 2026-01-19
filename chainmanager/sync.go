@@ -125,10 +125,30 @@ func (cm *ChainManager) SyncFromRemoteTip(ctx context.Context, remoteTipHash cha
 	}
 	log.Printf("Calculated chainwork for %d headers in %v", len(blockHeaders), time.Since(startConvert))
 
+	// Check if this is a reorg
+	oldTip := cm.GetTip(ctx)
+	var orphanedHashes []chainhash.Hash
+
+	if oldTip != nil && commonAncestor.Height < oldTip.Height {
+		// It's reorg
+		cm.mu.RLock()
+		for h := oldTip.Height; h > commonAncestor.Height; h-- {
+			orphanedHashes = append(orphanedHashes, cm.byHeight[h])
+		}
+		cm.mu.RUnlock()
+	}
+
 	// Import entire branch in one operation
 	startSetTip := time.Now()
-	if err := cm.SetChainTip(ctx, blockHeaders); err != nil {
-		return fmt.Errorf("failed to set chain tip: %w", err)
+	if len(orphanedHashes) > 0 {
+		if err := cm.SetChainTipWithReorg(ctx, blockHeaders, commonAncestor, orphanedHashes); err != nil {
+			return fmt.Errorf("failed to set chain tip: %w", err)
+		}
+		log.Printf("Reorg detected: depth=%d orphaned=%d", len(orphanedHashes), len(orphanedHashes))
+	} else {
+		if err := cm.SetChainTip(ctx, blockHeaders); err != nil {
+			return fmt.Errorf("failed to set chain tip: %w", err)
+		}
 	}
 	log.Printf("SetChainTip took %v", time.Since(startSetTip))
 

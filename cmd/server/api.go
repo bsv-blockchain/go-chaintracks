@@ -100,6 +100,57 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 	return nil
 }
 
+// HandleReorgStream handles SSE connections for reorg events.
+//
+//nolint:gocyclo,nestif // SSE streaming inherently requires multiple control paths
+func (s *Server) HandleReorgStream(c *fiber.Ctx) error {
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+	c.Set("Transfer-Encoding", "chunked")
+
+	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+		// Create a context that cancels when the client disconnects
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer cancel()
+
+		// Subscribe to reorg events stream
+		reorgChan := s.ct.SubscribeReorg(ctx)
+
+		// Keep connection alive with periodic keepalive messages
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case reorgEvent := <-reorgChan:
+				if reorgEvent == nil {
+					continue
+				}
+				if data, err := json.Marshal(reorgEvent); err == nil {
+					if _, writeErr := fmt.Fprintf(w, "data: %s\n\n", string(data)); writeErr != nil {
+						return
+					}
+					if flushErr := w.Flush(); flushErr != nil {
+						return
+					}
+				}
+			case <-ticker.C:
+				if _, writeErr := fmt.Fprintf(w, ": keepalive\n\n"); writeErr != nil {
+					return
+				}
+				if err := w.Flush(); err != nil {
+					return
+				}
+			}
+		}
+	}))
+
+	return nil
+}
+
 // Response represents the standard API response format
 type Response struct {
 	Status      string      `json:"status"`
@@ -501,6 +552,7 @@ func (s *Server) SetupRoutes(app *fiber.App, dashboard *DashboardHandler) {
 	v2.Get("/network", s.HandleGetNetwork)
 	v2.Get("/tip", s.HandleGetTip)
 	v2.Get("/tip/stream", s.HandleTipStream)
+	v2.Get("/reorg/stream", s.HandleReorgStream)
 	v2.Get("/header/height/:height", s.HandleGetHeaderByHeight)
 	v2.Get("/header/hash/:hash", s.HandleGetHeaderByHash)
 	v2.Get("/headers", s.HandleGetHeaders)
