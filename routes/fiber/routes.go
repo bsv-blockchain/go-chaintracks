@@ -40,19 +40,42 @@ type ErrorResponse struct {
 
 // Routes handles HTTP routes for chaintracks.
 type Routes struct {
-	cm           chaintracks.Chaintracks
-	sseClients   map[int64]*bufio.Writer
-	sseClientsMu sync.RWMutex
-	tipChan      <-chan *chaintracks.BlockHeader
+	cm             chaintracks.Chaintracks
+	sseClients     map[int64]*bufio.Writer
+	sseClientsMu   sync.RWMutex
+	tipChan        <-chan *chaintracks.BlockHeader
+	reorgChan      <-chan *chaintracks.ReorgEvent
+	reorgClients   map[int64]*bufio.Writer
+	reorgClientsMu sync.RWMutex
 }
 
 // NewRoutes creates a new Routes instance and starts broadcasting tip updates to SSE clients.
 // The context is used for cancellation - when canceled, the broadcast goroutine will stop.
 func NewRoutes(ctx context.Context, cm chaintracks.Chaintracks) *Routes {
 	r := &Routes{
-		cm:         cm,
-		sseClients: make(map[int64]*bufio.Writer),
+		cm:           cm,
+		sseClients:   make(map[int64]*bufio.Writer),
+		reorgClients: make(map[int64]*bufio.Writer),
 	}
+
+	reorgChan := cm.SubscribeReorg(ctx)
+	r.reorgChan = reorgChan
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case reorg, ok := <-reorgChan:
+				if !ok {
+					return
+				}
+				if reorg != nil {
+					r.broadcastReorg(reorg)
+				}
+			}
+		}
+	}()
 
 	tipChan := cm.Subscribe(ctx)
 	r.tipChan = tipChan
@@ -83,6 +106,7 @@ func (r *Routes) Register(router fiber.Router) {
 	router.Get("/height", r.handleGetHeight)
 	router.Get("/tip", r.handleGetTip)
 	router.Get("/tip/stream", r.handleTipStream)
+	router.Get("/reorg/stream", r.handleReorgStream)
 	router.Get("/header/height/:height", r.handleGetHeaderByHeight)
 	router.Get("/header/hash/:hash", r.handleGetHeaderByHash)
 	router.Get("/headers", r.handleGetHeaders)
@@ -285,6 +309,41 @@ func (r *Routes) broadcastTip(tip *chaintracks.BlockHeader) {
 	}
 }
 
+func (r *Routes) broadcastReorg(reorg *chaintracks.ReorgEvent) {
+	data, err := json.Marshal(reorg)
+	if err != nil {
+		return
+	}
+
+	sseMessage := fmt.Sprintf("data: %s\n\n", string(data))
+
+	r.reorgClientsMu.RLock()
+	clientsCopy := make(map[int64]*bufio.Writer, len(r.reorgClients))
+	for id, writer := range r.reorgClients {
+		clientsCopy[id] = writer
+	}
+	r.reorgClientsMu.RUnlock()
+
+	var failedClients []int64
+	for id, writer := range clientsCopy {
+		if _, err := fmt.Fprint(writer, sseMessage); err != nil {
+			failedClients = append(failedClients, id)
+			continue
+		}
+		if err := writer.Flush(); err != nil {
+			failedClients = append(failedClients, id)
+		}
+	}
+
+	if len(failedClients) > 0 {
+		r.reorgClientsMu.Lock()
+		for _, id := range failedClients {
+			delete(r.reorgClients, id)
+		}
+		r.reorgClientsMu.Unlock()
+	}
+}
+
 // handleGetNetwork returns the network name
 // @Summary Get network name
 // @Description Returns the Bitcoin network this service is connected to
@@ -370,6 +429,55 @@ func (r *Routes) handleTipStream(c *fiber.Ctx) error {
 				}
 			}
 		}
+
+		// Keep connection alive
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
+					return
+				}
+				if err := w.Flush(); err != nil {
+					return
+				}
+			}
+		}
+	}))
+
+	return nil
+}
+
+// handleReorgStream streams reorg events via SSE
+// @Summary Stream reorg events
+// @Description Server-Sent Events stream of chain reorganization events.
+// @Tags chaintracks
+// @Produce text/event-stream
+// @Success 200 {string} string "SSE stream of ReorgEvent JSON objects"
+// @Router /chaintracks/reorg/stream [get]
+func (r *Routes) handleReorgStream(c *fiber.Ctx) error {
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+
+	ctx := c.UserContext()
+
+	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+		clientID := time.Now().UnixNano()
+
+		r.reorgClientsMu.Lock()
+		r.reorgClients[clientID] = w
+		r.reorgClientsMu.Unlock()
+
+		defer func() {
+			r.reorgClientsMu.Lock()
+			delete(r.reorgClients, clientID)
+			r.reorgClientsMu.Unlock()
+		}()
 
 		// Keep connection alive
 		ticker := time.NewTicker(15 * time.Second)
