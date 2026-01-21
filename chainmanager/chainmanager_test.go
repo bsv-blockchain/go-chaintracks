@@ -796,7 +796,7 @@ func TestSetChainTipWithReorg(t *testing.T) {
 			commonAncestor: &chaintracks.BlockHeader{Header: &block.Header{}, Height: 100, Hash: hash1},
 			orphanedHashes: []chainhash.Hash{orphanHash1, orphanHash2},
 			expectedError:  nil,
-			verifyFunc: func(t *testing.T, cm *ChainManager, reorgChan chan *chaintracks.ReorgEvent) {
+			verifyFunc: func(t *testing.T, _ *ChainManager, reorgChan chan *chaintracks.ReorgEvent) {
 				select {
 				case event := <-reorgChan:
 					require.NotNil(t, event)
@@ -826,7 +826,7 @@ func TestSetChainTipWithReorg(t *testing.T) {
 			commonAncestor: &chaintracks.BlockHeader{Header: &block.Header{}, Height: 100, Hash: hash1},
 			orphanedHashes: []chainhash.Hash{orphanHash1},
 			expectedError:  nil,
-			verifyFunc: func(t *testing.T, cm *ChainManager, reorgChan chan *chaintracks.ReorgEvent) {
+			verifyFunc: func(t *testing.T, cm *ChainManager, _ chan *chaintracks.ReorgEvent) {
 				// since channel is nil, we only need to assert that tip was set
 				assert.Equal(t, hash2, cm.tip.Hash)
 			},
@@ -848,7 +848,7 @@ func TestSetChainTipWithReorg(t *testing.T) {
 			commonAncestor: &chaintracks.BlockHeader{Header: &block.Header{}, Height: 100, Hash: hash1},
 			orphanedHashes: []chainhash.Hash{orphanHash1},
 			expectedError:  nil,
-			verifyFunc: func(t *testing.T, cm *ChainManager, reorgChan chan *chaintracks.ReorgEvent) {
+			verifyFunc: func(t *testing.T, _ *ChainManager, reorgChan chan *chaintracks.ReorgEvent) {
 				event := <-reorgChan
 				assert.Equal(t, uint32(999), event.Depth) // The event.Depth should be the old one
 			},
@@ -863,8 +863,7 @@ func TestSetChainTipWithReorg(t *testing.T) {
 			err := cm.SetChainTipWithReorg(t.Context(), tt.branchHeaders, tt.commonAncestor, tt.orphanedHashes)
 
 			if tt.expectedError != nil {
-				require.Error(t, err)
-				assert.ErrorIs(t, err, tt.expectedError)
+				require.ErrorIs(t, err, tt.expectedError)
 			} else {
 				require.NoError(t, err)
 			}
@@ -902,7 +901,7 @@ func TestSubscribeReorg_MultipleSubscribersAllowed(t *testing.T) {
 	ch1 := cm.SubscribeReorg(t.Context())
 	ch2 := cm.SubscribeReorg(t.Context())
 
-	assert.Equal(t, 2, len(cm.reorgSubscribers))
+	assert.Len(t, cm.reorgSubscribers, 2)
 	assert.NotEqual(t, ch1, ch2)
 	// reorg event
 	err := cm.SetChainTipWithReorg(t.Context(), branchHeaders, commonAncestor, orphanedHashes)
@@ -951,7 +950,7 @@ func TestUnsubscribeReorg_AutoUnsubscribesOnContextCancel(t *testing.T) {
 				return cm, ch
 			},
 			verifyFunc: func(t *testing.T, cm *ChainManager, ch chan *chaintracks.ReorgEvent) {
-				assert.Len(t, cm.reorgSubscribers, 0, "Subscriber should be removed")
+				assert.Empty(t, cm.reorgSubscribers, "Subscriber should be removed")
 
 				_, ok := <-ch
 				assert.False(t, ok, "Channel should be closed")
@@ -1043,7 +1042,7 @@ func TestReorgBroadcast(t *testing.T) {
 				return cm, nil
 			},
 			event: &chaintracks.ReorgEvent{Depth: 1},
-			verifyFunc: func(t *testing.T, channels []chan *chaintracks.ReorgEvent, event *chaintracks.ReorgEvent) {
+			verifyFunc: func(t *testing.T, _ []chan *chaintracks.ReorgEvent, _ *chaintracks.ReorgEvent) {
 				// Should not panic - nothing to verify
 			},
 		},

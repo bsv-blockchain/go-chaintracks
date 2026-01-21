@@ -244,7 +244,7 @@ func (cm *ChainManager) SetChainTipWithReorg(ctx context.Context, branchHeaders 
 			OrphanedHashes: orphanedHashes,
 			NewTip:         branchHeaders[len(branchHeaders)-1],
 			CommonAncestor: commonAncestor,
-			Depth:          uint32(len(orphanedHashes)),
+			Depth:          uint32(len(orphanedHashes)), //nolint:gosec
 		}
 
 		select {

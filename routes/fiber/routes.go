@@ -58,44 +58,47 @@ func NewRoutes(ctx context.Context, cm chaintracks.Chaintracks) *Routes {
 		reorgClients: make(map[int64]*bufio.Writer),
 	}
 
-	reorgChan := cm.SubscribeReorg(ctx)
-	r.reorgChan = reorgChan
+	r.reorgChan = cm.SubscribeReorg(ctx)
+	go r.runReorgBroadcaster(ctx)
 
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case reorg, ok := <-reorgChan:
-				if !ok {
-					return
-				}
-				if reorg != nil {
-					r.broadcastReorg(reorg)
-				}
-			}
-		}
-	}()
-
-	tipChan := cm.Subscribe(ctx)
-	r.tipChan = tipChan
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case tip, ok := <-tipChan:
-				if !ok {
-					return
-				}
-				if tip != nil {
-					r.broadcastTip(tip)
-				}
-			}
-		}
-	}()
+	r.tipChan = cm.Subscribe(ctx)
+	go r.runTipBroadcaster(ctx)
 
 	return r
+}
+
+// runReorgBroadcaster listens for reorg events and broadcasts them to SSE clients.
+func (r *Routes) runReorgBroadcaster(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case reorg, ok := <-r.reorgChan:
+			if !ok {
+				return
+			}
+			if reorg != nil {
+				r.broadcastReorg(reorg)
+			}
+		}
+	}
+}
+
+// runTipBroadcaster listens for tip updates and broadcasts them to SSE clients.
+func (r *Routes) runTipBroadcaster(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case tip, ok := <-r.tipChan:
+			if !ok {
+				return
+			}
+			if tip != nil {
+				r.broadcastTip(tip)
+			}
+		}
+	}
 }
 
 // Register registers all chaintracks routes on the given router.

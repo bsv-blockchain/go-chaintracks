@@ -102,7 +102,7 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 
 // HandleReorgStream handles SSE connections for reorg events.
 //
-//nolint:gocyclo,nestif // SSE streaming inherently requires multiple control paths
+// SSE streaming inherently requires multiple control paths
 func (s *Server) HandleReorgStream(c *fiber.Ctx) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")

@@ -548,7 +548,8 @@ func TestClientSubscribeReorg(t *testing.T) {
 		}
 
 		data, _ := json.Marshal(reorgEvent)
-		fmt.Fprintf(w, "data: %s\n\n", data)
+		_, err := fmt.Fprintf(w, "data: %s\n\n", data)
+		require.NoError(t, err)
 		w.(http.Flusher).Flush()
 
 		// Keep connection open until client disconnects
@@ -602,5 +603,5 @@ func TestClientUnsubscribeReorg(t *testing.T) {
 	}
 
 	// Verify subscriber removed
-	assert.Len(t, client.reorgSubscribers, 0)
+	assert.Empty(t, client.reorgSubscribers)
 }

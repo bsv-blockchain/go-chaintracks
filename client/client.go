@@ -315,7 +315,7 @@ func (c *Client) readSSE(ctx context.Context, body io.ReadCloser) {
 
 // readReorgSSE reads Server-Sent Events from the response body.
 //
-//nolint:gocyclo // Inherent complexity of SSE parsing logic
+// Inherent complexity of SSE parsing logic
 func (c *Client) readReorgSSE(ctx context.Context, body io.ReadCloser) {
 	defer func() { _ = body.Close() }()
 
