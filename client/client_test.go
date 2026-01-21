@@ -1,10 +1,13 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/bsv-blockchain/go-sdk/block"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
@@ -526,4 +529,78 @@ func TestClientIsValidRootForHeight(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestClientSubscribeReorg(t *testing.T) {
+	// mock SSE server
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v2/reorg/stream", r.URL.Path)
+		assert.Equal(t, "text/event-stream", r.Header.Get("Accept"))
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		reorgEvent := chaintracks.ReorgEvent{
+			Depth:          2,
+			OrphanedHashes: []chainhash.Hash{{0x01}, {0x02}},
+			CommonAncestor: &chaintracks.BlockHeader{Height: 100},
+			NewTip:         &chaintracks.BlockHeader{Height: 102},
+		}
+
+		data, _ := json.Marshal(reorgEvent)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		w.(http.Flusher).Flush()
+
+		// Keep connection open until client disconnects
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	ch := client.SubscribeReorg(ctx)
+	require.NotNil(t, ch)
+
+	// should receive the reorg event
+	select {
+	case event := <-ch:
+		require.NotNil(t, event)
+		assert.Equal(t, uint32(2), event.Depth)
+		assert.Len(t, event.OrphanedHashes, 2)
+		assert.Equal(t, uint32(100), event.CommonAncestor.Height)
+		assert.Equal(t, uint32(102), event.NewTip.Height)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for reorg event")
+	}
+}
+
+func TestClientUnsubscribeReorg(t *testing.T) {
+	connectionClosed := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+		close(connectionClosed)
+	}))
+	defer server.Close()
+
+	client := New(server.URL)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	ch := client.SubscribeReorg(ctx)
+
+	time.Sleep(50 * time.Millisecond) // Let SSE connect
+	client.UnsubscribeReorg(ch)
+
+	select {
+	case <-connectionClosed:
+		//  SSE was stopped
+	case <-time.After(2 * time.Second):
+		t.Fatal("SSE connection should have been closed")
+	}
+
+	// Verify subscriber removed
+	assert.Len(t, client.reorgSubscribers, 0)
 }
