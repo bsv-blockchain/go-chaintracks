@@ -916,13 +916,18 @@ func TestSubscribeReorg_AutoUnsubscribesOnContextCancel(t *testing.T) {
 	ch := cm.SubscribeReorg(ctx)
 
 	// Verify subscribed
-	assert.Len(t, cm.reorgSubscribers, 1)
+	cm.reorgSubMu.RLock()
+	subscriberCount := len(cm.reorgSubscribers)
+	cm.reorgSubMu.RUnlock()
+	assert.Equal(t, 1, subscriberCount)
 
 	// Cancel context
 	cancel()
 
 	// Wait for the goroutine to unsubscribe (give it a moment)
 	require.Eventually(t, func() bool {
+		cm.reorgSubMu.RLock()
+		defer cm.reorgSubMu.RUnlock()
 		return len(cm.reorgSubscribers) == 0
 	}, time.Second, 10*time.Millisecond, "Subscriber should be removed after context cancel")
 
