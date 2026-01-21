@@ -1042,7 +1042,7 @@ func TestReorgBroadcast(t *testing.T) {
 				return cm, nil
 			},
 			event: &chaintracks.ReorgEvent{Depth: 1},
-			verifyFunc: func(t *testing.T, _ []chan *chaintracks.ReorgEvent, _ *chaintracks.ReorgEvent) {
+			verifyFunc: func(_ *testing.T, _ []chan *chaintracks.ReorgEvent, _ *chaintracks.ReorgEvent) {
 				// Should not panic - nothing to verify
 			},
 		},

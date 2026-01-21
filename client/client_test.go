@@ -549,7 +549,7 @@ func TestClientSubscribeReorg(t *testing.T) {
 
 		data, _ := json.Marshal(reorgEvent)
 		_, err := fmt.Fprintf(w, "data: %s\n\n", data)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		w.(http.Flusher).Flush()
 
 		// Keep connection open until client disconnects

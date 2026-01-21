@@ -101,54 +101,66 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 }
 
 // HandleReorgStream handles SSE connections for reorg events.
-//
-// SSE streaming inherently requires multiple control paths
 func (s *Server) HandleReorgStream(c *fiber.Ctx) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 	c.Set("Transfer-Encoding", "chunked")
 
-	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
-		// Create a context that cancels when the client disconnects
-		ctx, cancel := context.WithCancel(s.ctx)
-		defer cancel()
-
-		// Subscribe to reorg events stream
-		reorgChan := s.ct.SubscribeReorg(ctx)
-
-		// Keep connection alive with periodic keepalive messages
-		ticker := time.NewTicker(15 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case reorgEvent := <-reorgChan:
-				if reorgEvent == nil {
-					continue
-				}
-				if data, err := json.Marshal(reorgEvent); err == nil {
-					if _, writeErr := fmt.Fprintf(w, "data: %s\n\n", string(data)); writeErr != nil {
-						return
-					}
-					if flushErr := w.Flush(); flushErr != nil {
-						return
-					}
-				}
-			case <-ticker.C:
-				if _, writeErr := fmt.Fprintf(w, ": keepalive\n\n"); writeErr != nil {
-					return
-				}
-				if err := w.Flush(); err != nil {
-					return
-				}
-			}
-		}
-	}))
+	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(s.writeReorgStream))
 
 	return nil
+}
+
+// writeReorgStream handles the SSE stream for reorg events.
+func (s *Server) writeReorgStream(w *bufio.Writer) {
+	// Create a context that cancels when the client disconnects
+	ctx, cancel := context.WithCancel(s.ctx)
+	defer cancel()
+
+	reorgChan := s.ct.SubscribeReorg(ctx)
+
+	// Keep connection alive with periodic keepalive messages
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case reorgEvent := <-reorgChan:
+			if reorgEvent == nil {
+				continue
+			}
+			if !s.writeReorgEvent(w, reorgEvent) {
+				return
+			}
+		case <-ticker.C:
+			if !s.writeKeepalive(w) {
+				return
+			}
+		}
+	}
+}
+
+// writeReorgEvent marshals and writes a reorg event to the SSE stream.
+func (s *Server) writeReorgEvent(w *bufio.Writer, event *chaintracks.ReorgEvent) bool {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return true // skip marshal errors, continue stream
+	}
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(data)); err != nil {
+		return false
+	}
+	return w.Flush() == nil
+}
+
+// writeKeepalive writes a keepalive comment to the SSE stream.
+func (s *Server) writeKeepalive(w *bufio.Writer) bool {
+	if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
+		return false
+	}
+	return w.Flush() == nil
 }
 
 // Response represents the standard API response format
