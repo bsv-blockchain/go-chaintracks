@@ -1,7 +1,9 @@
 package chainmanager
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/bsv-blockchain/go-sdk/block"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
@@ -759,4 +761,338 @@ func TestChainManagerPruneOrphans(t *testing.T) {
 			tt.verifyFunc(t, cm)
 		})
 	}
+}
+
+func TestSetChainTipWithReorg(t *testing.T) {
+	// Create test hashes
+	hash1 := chainhash.Hash{1}
+	hash2 := chainhash.Hash{2}
+	hash3 := chainhash.Hash{3}
+	orphanHash1 := chainhash.Hash{0xA1}
+	orphanHash2 := chainhash.Hash{0xA2}
+
+	tests := []struct {
+		name           string
+		setupCM        func() *ChainManager
+		branchHeaders  []*chaintracks.BlockHeader
+		commonAncestor *chaintracks.BlockHeader
+		orphanedHashes []chainhash.Hash
+		expectedError  error
+		verifyFunc     func(t *testing.T, cm *ChainManager, reorgChan chan *chaintracks.ReorgEvent)
+	}{
+		{
+			name: "PublishesReorgEventToChannel",
+			setupCM: func() *ChainManager {
+				return &ChainManager{
+					byHash:       make(map[chainhash.Hash]*chaintracks.BlockHeader),
+					byHeight:     make([]chainhash.Hash, 0),
+					reorgMsgChan: make(chan *chaintracks.ReorgEvent, 1),
+				}
+			},
+			branchHeaders: []*chaintracks.BlockHeader{
+				{Header: &block.Header{}, Height: 101, Hash: hash2},
+				{Header: &block.Header{}, Height: 102, Hash: hash3},
+			},
+			commonAncestor: &chaintracks.BlockHeader{Header: &block.Header{}, Height: 100, Hash: hash1},
+			orphanedHashes: []chainhash.Hash{orphanHash1, orphanHash2},
+			expectedError:  nil,
+			verifyFunc: func(t *testing.T, cm *ChainManager, reorgChan chan *chaintracks.ReorgEvent) {
+				select {
+				case event := <-reorgChan:
+					require.NotNil(t, event)
+					assert.Equal(t, uint32(2), event.Depth)
+					assert.Len(t, event.OrphanedHashes, 2)
+					assert.Equal(t, orphanHash1, event.OrphanedHashes[0])
+					assert.Equal(t, orphanHash2, event.OrphanedHashes[1])
+					assert.Equal(t, hash3, event.NewTip.Hash) // last header in branch
+					assert.Equal(t, hash1, event.CommonAncestor.Hash)
+				default:
+					t.Fatal("Expected reorg event on channel")
+				}
+			},
+		},
+		{
+			name: "HandlesNilReorgChannel",
+			setupCM: func() *ChainManager {
+				return &ChainManager{
+					byHash:       make(map[chainhash.Hash]*chaintracks.BlockHeader),
+					byHeight:     make([]chainhash.Hash, 0),
+					reorgMsgChan: nil,
+				}
+			},
+			branchHeaders: []*chaintracks.BlockHeader{
+				{Header: &block.Header{}, Height: 101, Hash: hash2},
+			},
+			commonAncestor: &chaintracks.BlockHeader{Header: &block.Header{}, Height: 100, Hash: hash1},
+			orphanedHashes: []chainhash.Hash{orphanHash1},
+			expectedError:  nil,
+			verifyFunc: func(t *testing.T, cm *ChainManager, reorgChan chan *chaintracks.ReorgEvent) {
+				// since channel is nil, we only need to assert that tip was set
+				assert.Equal(t, hash2, cm.tip.Hash)
+			},
+		},
+		{
+			name: "SkipsWhenChannelFull",
+			setupCM: func() *ChainManager {
+				ch := make(chan *chaintracks.ReorgEvent, 1)
+				ch <- &chaintracks.ReorgEvent{Depth: 999}
+				return &ChainManager{
+					byHash:       make(map[chainhash.Hash]*chaintracks.BlockHeader),
+					byHeight:     make([]chainhash.Hash, 0),
+					reorgMsgChan: ch,
+				}
+			},
+			branchHeaders: []*chaintracks.BlockHeader{
+				{Header: &block.Header{}, Height: 101, Hash: hash2},
+			},
+			commonAncestor: &chaintracks.BlockHeader{Header: &block.Header{}, Height: 100, Hash: hash1},
+			orphanedHashes: []chainhash.Hash{orphanHash1},
+			expectedError:  nil,
+			verifyFunc: func(t *testing.T, cm *ChainManager, reorgChan chan *chaintracks.ReorgEvent) {
+				event := <-reorgChan
+				assert.Equal(t, uint32(999), event.Depth) // The event.Depth should be the old one
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm := tt.setupCM()
+			reorgChan := cm.reorgMsgChan
+
+			err := cm.SetChainTipWithReorg(t.Context(), tt.branchHeaders, tt.commonAncestor, tt.orphanedHashes)
+
+			if tt.expectedError != nil {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, tt.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
+
+			if tt.verifyFunc != nil {
+				tt.verifyFunc(t, cm, reorgChan)
+			}
+		})
+	}
+}
+
+func TestSubscribeReorg_MultipleSubscribersAllowed(t *testing.T) {
+	// Create test hashes
+	hash1 := chainhash.Hash{1}
+	hash2 := chainhash.Hash{2}
+	hash3 := chainhash.Hash{3}
+	orphanHash1 := chainhash.Hash{0xA1}
+	orphanHash2 := chainhash.Hash{0xA2}
+
+	// setup chain manager and reorg data
+	cm := &ChainManager{
+		byHash:           make(map[chainhash.Hash]*chaintracks.BlockHeader),
+		byHeight:         make([]chainhash.Hash, 0),
+		reorgMsgChan:     make(chan *chaintracks.ReorgEvent, 1),
+		reorgSubscribers: make(map[chan *chaintracks.ReorgEvent]struct{}),
+	}
+	branchHeaders := []*chaintracks.BlockHeader{
+		{Header: &block.Header{}, Height: 101, Hash: hash2},
+		{Header: &block.Header{}, Height: 102, Hash: hash3},
+	}
+	commonAncestor := &chaintracks.BlockHeader{Header: &block.Header{}, Height: 100, Hash: hash1}
+	orphanedHashes := []chainhash.Hash{orphanHash1, orphanHash2}
+
+	// create subscribers
+	ch1 := cm.SubscribeReorg(t.Context())
+	ch2 := cm.SubscribeReorg(t.Context())
+
+	assert.Equal(t, 2, len(cm.reorgSubscribers))
+	assert.NotEqual(t, ch1, ch2)
+	// reorg event
+	err := cm.SetChainTipWithReorg(t.Context(), branchHeaders, commonAncestor, orphanedHashes)
+	require.NoError(t, err)
+}
+
+func TestSubscribeReorg_AutoUnsubscribesOnContextCancel(t *testing.T) {
+	cm := &ChainManager{
+		reorgSubscribers: make(map[chan *chaintracks.ReorgEvent]struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := cm.SubscribeReorg(ctx)
+
+	// Verify subscribed
+	assert.Len(t, cm.reorgSubscribers, 1)
+
+	// Cancel context
+	cancel()
+
+	// Wait for the goroutine to unsubscribe (give it a moment)
+	require.Eventually(t, func() bool {
+		return len(cm.reorgSubscribers) == 0
+	}, time.Second, 10*time.Millisecond, "Subscriber should be removed after context cancel")
+
+	// Channel should be closed
+	_, ok := <-ch
+	assert.False(t, ok, "Channel should be closed")
+}
+
+func TestUnsubscribeReorg_AutoUnsubscribesOnContextCancel(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupCM    func() (*ChainManager, chan *chaintracks.ReorgEvent)
+		verifyFunc func(t *testing.T, cm *ChainManager, ch chan *chaintracks.ReorgEvent)
+	}{
+		{
+			name: "RemovesSubscriberAndClosesChannel",
+			setupCM: func() (*ChainManager, chan *chaintracks.ReorgEvent) {
+				ch := make(chan *chaintracks.ReorgEvent, 1)
+				cm := &ChainManager{
+					reorgSubscribers: map[chan *chaintracks.ReorgEvent]struct{}{
+						ch: {},
+					},
+				}
+
+				return cm, ch
+			},
+			verifyFunc: func(t *testing.T, cm *ChainManager, ch chan *chaintracks.ReorgEvent) {
+				assert.Len(t, cm.reorgSubscribers, 0, "Subscriber should be removed")
+
+				_, ok := <-ch
+				assert.False(t, ok, "Channel should be closed")
+			},
+		},
+		{
+			name: "RemovesOnlySpecifiedSubscriberAndClosesChannel",
+			setupCM: func() (*ChainManager, chan *chaintracks.ReorgEvent) {
+				ch1 := make(chan *chaintracks.ReorgEvent, 1)
+				ch2 := make(chan *chaintracks.ReorgEvent, 1)
+				cm := &ChainManager{
+					reorgSubscribers: map[chan *chaintracks.ReorgEvent]struct{}{
+						ch1: {},
+						ch2: {},
+					},
+				}
+
+				return cm, ch1
+			},
+			verifyFunc: func(t *testing.T, cm *ChainManager, ch chan *chaintracks.ReorgEvent) {
+				assert.Len(t, cm.reorgSubscribers, 1, "Only one subscriber should be removed")
+
+				_, ok := <-ch
+				assert.False(t, ok, "Channel should be closed")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm, ch := tt.setupCM()
+
+			cm.UnsubscribeReorg(ch)
+
+			tt.verifyFunc(t, cm, ch)
+		})
+	}
+}
+
+func TestReorgBroadcast(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupCM    func() (*ChainManager, []chan *chaintracks.ReorgEvent)
+		event      *chaintracks.ReorgEvent
+		verifyFunc func(t *testing.T, channels []chan *chaintracks.ReorgEvent, event *chaintracks.ReorgEvent)
+	}{
+		{
+			name: "BroadcastsToAllSubscribers",
+			setupCM: func() (*ChainManager, []chan *chaintracks.ReorgEvent) {
+				ch1 := make(chan *chaintracks.ReorgEvent, 1)
+				ch2 := make(chan *chaintracks.ReorgEvent, 1)
+				ch3 := make(chan *chaintracks.ReorgEvent, 1)
+				cm := &ChainManager{
+					reorgSubscribers: map[chan *chaintracks.ReorgEvent]struct{}{
+						ch1: {},
+						ch2: {},
+						ch3: {},
+					},
+				}
+
+				return cm, []chan *chaintracks.ReorgEvent{ch1, ch2, ch3}
+			},
+			event: &chaintracks.ReorgEvent{
+				Depth:          3,
+				OrphanedHashes: []chainhash.Hash{{0x01}, {0x02}, {0x03}},
+				CommonAncestor: &chaintracks.BlockHeader{Height: 100},
+				NewTip:         &chaintracks.BlockHeader{Height: 100},
+			},
+			verifyFunc: func(t *testing.T, channels []chan *chaintracks.ReorgEvent, event *chaintracks.ReorgEvent) {
+				for i, ch := range channels {
+					select {
+					case received := <-ch:
+						assert.Equal(t, event.Depth, received.Depth, "Channel %d: Depth mismatch", i)
+						assert.Equal(t, event.OrphanedHashes, received.OrphanedHashes, "Channel %d: OrphanedHashes mismatch", i)
+						assert.Equal(t, event.CommonAncestor.Height, received.CommonAncestor.Height, "Channel %d: CommonAncestor mismatch", i)
+						assert.Equal(t, event.NewTip.Height, received.NewTip.Height, "Channel %d: NewTip mismatch", i)
+					default:
+						t.Errorf("Channel %d: expected event but got none", i)
+					}
+				}
+			},
+		},
+		{
+			name: "HandlesNoSubscribers",
+			setupCM: func() (*ChainManager, []chan *chaintracks.ReorgEvent) {
+				cm := &ChainManager{
+					reorgSubscribers: make(map[chan *chaintracks.ReorgEvent]struct{}),
+				}
+				return cm, nil
+			},
+			event: &chaintracks.ReorgEvent{Depth: 1},
+			verifyFunc: func(t *testing.T, channels []chan *chaintracks.ReorgEvent, event *chaintracks.ReorgEvent) {
+				// Should not panic - nothing to verify
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		cm, channels := tt.setupCM()
+
+		cm.reorgBroadcast(tt.event)
+
+		tt.verifyFunc(t, channels, tt.event)
+	}
+}
+
+func TestReorgFanOut_BroadcastEventsFromChannelToAllSubscribers(t *testing.T) {
+	ch1 := make(chan *chaintracks.ReorgEvent, 1)
+	ch2 := make(chan *chaintracks.ReorgEvent, 1)
+	cm := &ChainManager{
+		reorgMsgChan: make(chan *chaintracks.ReorgEvent, 1),
+		reorgSubscribers: map[chan *chaintracks.ReorgEvent]struct{}{
+			ch1: {},
+			ch2: {},
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Start the fan-out goroutine
+	go cm.reorgFanOut(ctx)
+	// Send event to the internal channel
+	event := &chaintracks.ReorgEvent{
+		Depth:          2,
+		OrphanedHashes: []chainhash.Hash{{0xAA}, {0xBB}},
+	}
+	cm.reorgMsgChan <- event
+	// Both subscribers should receive it
+	require.Eventually(t, func() bool {
+		select {
+		case received := <-ch1:
+			return received.Depth == 2
+		default:
+			return false
+		}
+	}, time.Second, 10*time.Millisecond, "ch1 should receive event")
+	require.Eventually(t, func() bool {
+		select {
+		case received := <-ch2:
+			return received.Depth == 2
+		default:
+			return false
+		}
+	}, time.Second, 10*time.Millisecond, "ch2 should receive event")
 }
