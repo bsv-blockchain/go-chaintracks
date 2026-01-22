@@ -34,8 +34,9 @@ type ChainManager struct {
 
 // New creates a new ChainManager, restores from local files, and starts the P2P subscription.
 // The subscription will automatically stop when ctx is canceled.
-// If bootstrapURL is provided, it will sync from a remote teranode before returning.
-func New(ctx context.Context, network, localStoragePath string, p2pClient *p2p.Client, bootstrapURL ...string) (*ChainManager, error) {
+// If bootstrapURL is provided, it will sync from a remote source before returning.
+// bootstrapMode can be "api" (gorillanode-style) or "cdn" (TypeScript CDN-style).
+func New(ctx context.Context, network, localStoragePath string, p2pClient *p2p.Client, bootstrapURL, bootstrapMode string) (*ChainManager, error) {
 	if p2pClient == nil {
 		return nil, chaintracks.ErrP2PClientRequired
 	}
@@ -57,9 +58,14 @@ func New(ctx context.Context, network, localStoragePath string, p2pClient *p2p.C
 		return nil, fmt.Errorf("failed to load checkpoint files: %w", err)
 	}
 
-	// Run bootstrap sync if configured (optional parameter)
-	if len(bootstrapURL) > 0 && bootstrapURL[0] != "" {
-		cm.runBootstrapSync(ctx, bootstrapURL[0])
+	// Run bootstrap sync if configured
+	if bootstrapURL != "" {
+		switch bootstrapMode {
+		case "cdn":
+			cm.runCDNBootstrap(ctx, bootstrapURL)
+		default: // "api" or empty (backward compatible)
+			cm.runBootstrapSync(ctx, bootstrapURL)
+		}
 	}
 
 	// Start P2P block subscription

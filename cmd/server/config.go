@@ -15,6 +15,8 @@ import (
 // AppConfig holds all configuration for the server application.
 type AppConfig struct {
 	Port        int           `mapstructure:"port"`
+	CDNPort     int           `mapstructure:"cdn_port"`
+	CDNEnabled  bool          `mapstructure:"cdn_enabled"`
 	Chaintracks config.Config `mapstructure:"chaintracks"`
 }
 
@@ -26,6 +28,8 @@ func Load() (*AppConfig, error) {
 
 	// Set defaults
 	v.SetDefault("port", 3011)
+	v.SetDefault("cdn_port", 3012)
+	v.SetDefault("cdn_enabled", false)
 	cfg.Chaintracks.SetDefaults(v, "chaintracks")
 
 	// Config file settings

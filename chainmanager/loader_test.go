@@ -216,8 +216,8 @@ func TestLoadFromLocalFiles(t *testing.T) {
 
 	ctx := t.Context()
 
-	// Pass nil for p2pClient - this test only verifies file loading, not P2P
-	cm, err := New(ctx, "main", testCDNPath, nil)
+	// Use NewForTesting - this test only verifies file loading, not P2P
+	cm, err := NewForTesting(ctx, "main", testCDNPath)
 	if err != nil {
 		t.Fatalf("Failed to create ChainManager: %v", err)
 	}

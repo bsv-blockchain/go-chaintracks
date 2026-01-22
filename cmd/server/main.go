@@ -40,20 +40,34 @@ func main() {
 
 	app := createFiberApp(ctx, ct, cfg.Port)
 
+	// Start CDN server if enabled
+	var cdnServer *CDNServer
+	if cfg.CDNEnabled {
+		cdnServer = NewCDNServer(cfg.Chaintracks.StoragePath, cfg.CDNPort)
+		go func() {
+			if err := cdnServer.Start(); err != nil {
+				log.Printf("CDN server error: %v", err)
+			}
+		}()
+	}
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
 
-	shutdown(cancel, ct, app)
+	shutdown(cancel, ct, app, cdnServer)
 }
 
 func logConfig(cfg *AppConfig) {
 	log.Printf("Starting chaintracks-server")
 	log.Printf("  Network: %s", cfg.Chaintracks.P2P.Network)
-	log.Printf("  Port: %d", cfg.Port)
+	log.Printf("  API Port: %d", cfg.Port)
+	if cfg.CDNEnabled {
+		log.Printf("  CDN Port: %d", cfg.CDNPort)
+	}
 	log.Printf("  Storage Path: %s", cfg.Chaintracks.StoragePath)
 	if cfg.Chaintracks.BootstrapURL != "" {
-		log.Printf("  Bootstrap URL: %s", cfg.Chaintracks.BootstrapURL)
+		log.Printf("  Bootstrap URL: %s (mode: %s)", cfg.Chaintracks.BootstrapURL, cfg.Chaintracks.BootstrapMode)
 	}
 }
 
@@ -75,7 +89,7 @@ func logStatus(ctx context.Context, ct chaintracks.Chaintracks) {
 			tip := ct.GetTip(ctx)
 			if tip != nil {
 				if getPeerCount != nil {
-					log.Printf("Height: %d, Tip: %s, Peers: %d", tip.Height, tip.Header.Hash().String(), getPeerCount())
+					log.Printf("Height: %d, Tip: %s, Active Peers: %d", tip.Height, tip.Header.Hash().String(), getPeerCount())
 				} else {
 					log.Printf("Height: %d, Tip: %s", tip.Height, tip.Header.Hash().String())
 				}
@@ -126,13 +140,19 @@ func createFiberApp(ctx context.Context, ct chaintracks.Chaintracks, port int) *
 	return app
 }
 
-func shutdown(cancel context.CancelFunc, ct chaintracks.Chaintracks, app *fiber.App) {
+func shutdown(cancel context.CancelFunc, ct chaintracks.Chaintracks, app *fiber.App, cdnServer *CDNServer) {
 	log.Println("Shutting down gracefully...")
 	cancel()
 	// Close P2P client if this is an embedded ChainManager
 	if cm, ok := ct.(*chainmanager.ChainManager); ok {
 		if err := cm.P2PClient.Close(); err != nil {
 			log.Printf("Error closing P2P client: %v", err)
+		}
+	}
+	// Shutdown CDN server if running
+	if cdnServer != nil {
+		if err := cdnServer.Shutdown(); err != nil {
+			log.Printf("Error closing CDN server: %v", err)
 		}
 	}
 	if err := app.Shutdown(); err != nil {

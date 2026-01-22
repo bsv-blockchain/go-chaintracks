@@ -144,7 +144,10 @@ func (h *DashboardHandler) HandleStatus(c *fiber.Ctx) error {
 
         <div class="section">
             <h2>P2P Network</h2>
-            <div><span class="label">Connected Peers:</span><span class="value">%d</span></div>
+            <div><span class="label">Active Peers:</span><span class="value">%d</span></div>
+            <div style="color: #808080; font-size: 0.85em; margin-bottom: 10px;">
+                (Peers that have sent messages. Check logs for connection events.)
+            </div>
             <div class="peer-list">
                 %s
             </div>

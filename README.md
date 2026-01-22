@@ -114,9 +114,11 @@ go get -u github.com/bsv-blockchain/go-chaintracks
 - Chainwork calculation and comparison
 - Automatic orphan pruning (keeps last 100 blocks)
 - P2P live sync with automatic updates
-- Optional bootstrap sync from remote node
+- Bootstrap sync from CDN or API sources
 - REST API with v2 endpoints
+- CDN server for hosting header files
 - File-based persistence with metadata
+- Docker support with docker-compose
 
 ### Architecture
 - **ChainManager** - Main orchestrator for chain operations
@@ -211,11 +213,11 @@ go build -o server ./cmd/server
 ./server
 
 # Configure via .env file
-cp .env.example .env
+cp env.docker .env
 # Edit .env with your settings
 
 # Or configure via environment variables
-PORT=3011 CHAIN=main STORAGE_PATH=~/.chaintracks ./server
+CHAINTRACKS_PORT=3011 CHAINTRACKS_CHAINTRACKS_P2P_NETWORK=main ./server
 ```
 
 Server starts on port 3011 with Swagger UI at `/docs`.
@@ -223,17 +225,56 @@ Server starts on port 3011 with Swagger UI at `/docs`.
 </details>
 
 <details>
+<summary><strong><code>Docker Deployment</code></strong></summary>
+
+The easiest way to run go-chaintracks is with Docker:
+
+```bash
+# Quick start with default settings
+docker compose up -d
+
+# View logs
+docker compose logs -f
+```
+
+This starts:
+- **API Server** on port 3011 - REST API for header queries
+- **CDN Server** on port 3012 - Static header files for bootstrap (optional)
+
+Configure via environment variables in `.env`:
+
+```bash
+# Copy the example config
+cp env.docker .env
+
+# Key settings:
+CHAIN=main                                          # Network: main or test
+CHAINTRACKS_MODE=embedded                           # Mode: embedded or remote
+CDN_ENABLED=true                                    # Enable CDN server on port 3012
+BOOTSTRAP_URL=https://chaintracks-cdn-us-1.bsvb.tech  # Bootstrap source
+BOOTSTRAP_MODE=cdn                                  # Bootstrap mode: cdn or api
+```
+
+</details>
+
+<details>
 <summary><strong><code>API Endpoints</code></strong></summary>
 
-Current API endpoints:
-- `GET /v2/network` - Network name (main, test, or teratest)
-- `GET /v2/height` - Current blockchain height
-- `GET /v2/tip/hash` - Chain tip hash
-- `GET /v2/tip/header` - Chain tip header object
+**API Server (port 3011):**
+- `GET /v2/network` - Network name (main or test)
+- `GET /v2/tip` - Chain tip header (JSON)
+- `GET /v2/tip.bin` - Chain tip header (binary)
 - `GET /v2/tip/stream` - SSE stream for real-time tip updates
-- `GET /v2/header/height/:height` - Header by height (path param)
-- `GET /v2/header/hash/:hash` - Header by hash (path param)
-- `GET /v2/headers?height=N&count=C` - Multiple headers
+- `GET /v2/header/height/:height` - Header by height (JSON)
+- `GET /v2/header/height/:height.bin` - Header by height (binary)
+- `GET /v2/header/hash/:hash` - Header by hash (JSON)
+- `GET /v2/header/hash/:hash.bin` - Header by hash (binary)
+- `GET /v2/headers?height=N&count=C` - Multiple headers (binary)
+
+**CDN Server (port 3012, when enabled):**
+- `GET /{network}NetBlockHeaders.json` - Metadata with file list
+- `GET /{network}Net_{index}.headers` - Binary header files (100k headers each)
+- `GET /health` - CDN health check
 
 Full API documentation available at `/docs` when running.
 
@@ -246,12 +287,37 @@ Headers are stored in 100k-block files:
 ```text
 ~/.chaintracks/
 ├── mainNetBlockHeaders.json    # Metadata
-├── mainNet_0.headers            # Blocks 0-99999
-├── mainNet_1.headers            # Blocks 100000-199999
+├── mainNet_0.headers           # Blocks 0-99999
+├── mainNet_1.headers           # Blocks 100000-199999
 └── ...
 ```
 
 Each header is 80 bytes. Files use seek-based updates for efficient writes.
+
+This format is compatible with the TypeScript chaintracks-server CDN format, allowing:
+- Bootstrap from any CDN hosting these files
+- Self-hosting your own CDN for other nodes to bootstrap from
+
+</details>
+
+<details>
+<summary><strong><code>Bootstrap Options</code></strong></summary>
+
+Two bootstrap modes are supported:
+
+**CDN Mode (recommended):**
+```bash
+BOOTSTRAP_URL=https://chaintracks-cdn-us-1.bsvb.tech
+BOOTSTRAP_MODE=cdn
+```
+Downloads headers from TypeScript CDN format files. Fast and efficient for initial sync.
+
+**API Mode:**
+```bash
+BOOTSTRAP_URL=https://mainnet.gorillanode.io/api/v1
+BOOTSTRAP_MODE=api
+```
+Fetches headers via REST API calls. Compatible with gorillanode-style endpoints.
 
 </details>
 
