@@ -228,6 +228,35 @@ func (cm *ChainManager) SetChainTip(ctx context.Context, branchHeaders []*chaint
 	return nil
 }
 
+// SetChainTipWithReorg updates the chain tip and emits a reorg event.
+// branchHeaders should be ordered from oldest to newest.
+// commonAncestor is the fork point, orphanedHashes are blocks no longer on main chain.
+func (cm *ChainManager) SetChainTipWithReorg(ctx context.Context, branchHeaders []*chaintracks.BlockHeader, commonAncestor *chaintracks.BlockHeader, orphanedHashes []chainhash.Hash) error {
+	err := cm.SetChainTip(ctx, branchHeaders)
+	if err != nil {
+		return fmt.Errorf("failed to set chain tip: %w", err)
+	}
+	reorgMsgChan := cm.reorgMsgChan
+
+	// Publish reorg event (non-blocking)
+	if reorgMsgChan != nil {
+		reorgEvent := &chaintracks.ReorgEvent{
+			OrphanedHashes: orphanedHashes,
+			NewTip:         branchHeaders[len(branchHeaders)-1],
+			CommonAncestor: commonAncestor,
+			Depth:          uint32(len(orphanedHashes)), //nolint:gosec // reorg depth bounded by chain history, cannot exceed uint32
+		}
+
+		select {
+		case reorgMsgChan <- reorgEvent:
+		default:
+			// Channel full after drain shouldn't happen, but skip if it does
+		}
+	}
+
+	return nil
+}
+
 // writeHeadersToFiles writes headers to the appropriate .headers files.
 func (cm *ChainManager) writeHeadersToFiles(headers []*chaintracks.BlockHeader) error {
 	if cm.localStoragePath == "" {

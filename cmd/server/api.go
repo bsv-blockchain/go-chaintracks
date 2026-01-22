@@ -100,6 +100,69 @@ func (s *Server) HandleTipStream(c *fiber.Ctx) error {
 	return nil
 }
 
+// HandleReorgStream handles SSE connections for reorg events.
+func (s *Server) HandleReorgStream(c *fiber.Ctx) error {
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+	c.Set("Transfer-Encoding", "chunked")
+
+	c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(s.writeReorgStream))
+
+	return nil
+}
+
+// writeReorgStream handles the SSE stream for reorg events.
+func (s *Server) writeReorgStream(w *bufio.Writer) {
+	// Create a context that cancels when the client disconnects
+	ctx, cancel := context.WithCancel(s.ctx)
+	defer cancel()
+
+	reorgChan := s.ct.SubscribeReorg(ctx)
+
+	// Keep connection alive with periodic keepalive messages
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case reorgEvent := <-reorgChan:
+			if reorgEvent == nil {
+				continue
+			}
+			if !s.writeReorgEvent(w, reorgEvent) {
+				return
+			}
+		case <-ticker.C:
+			if !s.writeKeepalive(w) {
+				return
+			}
+		}
+	}
+}
+
+// writeReorgEvent marshals and writes a reorg event to the SSE stream.
+func (s *Server) writeReorgEvent(w *bufio.Writer, event *chaintracks.ReorgEvent) bool {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return true // skip marshal errors, continue stream
+	}
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(data)); err != nil {
+		return false
+	}
+	return w.Flush() == nil
+}
+
+// writeKeepalive writes a keepalive comment to the SSE stream.
+func (s *Server) writeKeepalive(w *bufio.Writer) bool {
+	if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
+		return false
+	}
+	return w.Flush() == nil
+}
+
 // Response represents the standard API response format
 type Response struct {
 	Status      string      `json:"status"`
@@ -501,6 +564,7 @@ func (s *Server) SetupRoutes(app *fiber.App, dashboard *DashboardHandler) {
 	v2.Get("/network", s.HandleGetNetwork)
 	v2.Get("/tip", s.HandleGetTip)
 	v2.Get("/tip/stream", s.HandleTipStream)
+	v2.Get("/reorg/stream", s.HandleReorgStream)
 	v2.Get("/header/height/:height", s.HandleGetHeaderByHeight)
 	v2.Get("/header/hash/:hash", s.HandleGetHeaderByHash)
 	v2.Get("/headers", s.HandleGetHeaders)

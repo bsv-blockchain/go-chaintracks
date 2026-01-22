@@ -41,4 +41,14 @@ type Chaintracks interface {
 	// For Client: stops SSE and clears tip cache when last subscriber leaves.
 	// For ChainManager: removes the channel from fan-out (P2P keeps running).
 	Unsubscribe(ch <-chan *BlockHeader)
+
+	// SubscribeReorg returns a channel that receives reorg events.
+	// For Client: starts SSE connection to /v2/reorg/stream on first subscriber.
+	// For ChainManager: returns a channel fed by reorg detection in SetChainTip.
+	SubscribeReorg(ctx context.Context) <-chan *ReorgEvent
+
+	// UnsubscribeReorg removes a reorg subscriber channel.
+	// For Client: stops reorg SSE when last subscriber leaves.
+	// For ChainManager: removes the channel from reorg fan-out.
+	UnsubscribeReorg(ch <-chan *ReorgEvent)
 }
