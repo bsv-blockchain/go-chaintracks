@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine@sha256:5dffbd69b37b8e9fc35d94817e94bc7bf4fd047147e3c5353d357bd3492992bf AS builder
 
 WORKDIR /app
 
@@ -9,14 +9,14 @@ RUN apk add --no-cache git ca-certificates
 # Copy go mod files first for layer caching
 COPY go.mod go.sum ./
 
-# Download dependencies - allow newer go version requirement
-RUN GOTOOLCHAIN=go1.23.12+auto go mod download
+# Download dependencies
+RUN go mod download
 
 # Copy source code
 COPY . .
 
 # Build the binary with static linking
-RUN GOTOOLCHAIN=auto CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server ./cmd/server
 
 # Production stage
 FROM alpine:3.21
