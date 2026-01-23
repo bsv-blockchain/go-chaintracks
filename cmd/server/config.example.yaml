@@ -6,8 +6,8 @@
 port: 3011
 
 # CDN static file server
-cdn_enabled: false  # Enable CDN server for static header files
-cdn_port: 3012      # CDN server port (same as TypeScript)
+cdn_enabled: false # Enable CDN server for static header files
+cdn_port: 3012 # CDN server port (same as TypeScript)
 
 chaintracks:
   # Mode: "embedded" runs chainmanager locally, "remote" connects to a chaintracks server

@@ -21,8 +21,8 @@ services:
     container_name: chaintracks-server
     restart: unless-stopped
     ports:
-      - "3011:3011"  # ChaintracksService API
-      - "3012:3012"  # CDN Server (static header files)
+      - "3011:3011" # ChaintracksService API
+      - "3012:3012" # CDN Server (static header files)
     environment:
       # Server ports
       - CHAINTRACKS_PORT=3011
