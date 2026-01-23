@@ -3,9 +3,11 @@ package chainmanager
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/big"
 	"net/http"
 	"time"
@@ -18,6 +20,13 @@ import (
 const (
 	cdnHeadersPerFile = 100000
 	cdnHeaderSize     = 80
+)
+
+// Sentinel errors for CDN bootstrap operations.
+var (
+	ErrCDNMetadataFetchFailed = errors.New("metadata fetch failed")
+	ErrCDNFileFetchFailed     = errors.New("file fetch failed")
+	ErrCDNInvalidFileSize     = errors.New("invalid file size")
 )
 
 // CDNBootstrapper handles bootstrap from CDN-format header files.
@@ -52,10 +61,10 @@ func (b *CDNBootstrapper) FetchMetadata(ctx context.Context) (*chaintracks.CDNMe
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch metadata: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("metadata fetch failed: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("%w: status %d", ErrCDNMetadataFetchFailed, resp.StatusCode)
 	}
 
 	var metadata chaintracks.CDNMetadata
@@ -80,10 +89,10 @@ func (b *CDNBootstrapper) FetchHeadersFile(ctx context.Context, fileName string)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch file %s: %w", fileName, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("file fetch failed for %s: status %d", fileName, resp.StatusCode)
+		return nil, fmt.Errorf("%w for %s: status %d", ErrCDNFileFetchFailed, fileName, resp.StatusCode)
 	}
 
 	data, err := io.ReadAll(resp.Body)
@@ -93,8 +102,8 @@ func (b *CDNBootstrapper) FetchHeadersFile(ctx context.Context, fileName string)
 
 	// Validate file size
 	if len(data)%cdnHeaderSize != 0 {
-		return nil, fmt.Errorf("invalid file size for %s: %d bytes (not multiple of %d)",
-			fileName, len(data), cdnHeaderSize)
+		return nil, fmt.Errorf("%w for %s: %d bytes (not multiple of %d)",
+			ErrCDNInvalidFileSize, fileName, len(data), cdnHeaderSize)
 	}
 
 	return data, nil
@@ -120,8 +129,24 @@ func (b *CDNBootstrapper) Bootstrap(ctx context.Context, cm *ChainManager) error
 	log.Printf("Current height: %d, starting from file index %d", currentHeight, startFileIndex)
 
 	// 3. Download and import each file
+	if err := b.processFiles(ctx, cm, metadata, startFileIndex); err != nil {
+		return err
+	}
+
+	tip := cm.GetTip(ctx)
+	if tip != nil {
+		log.Printf("CDN bootstrap complete. Chain tip: height=%d hash=%s", tip.Height, tip.Hash.String())
+	}
+
+	return nil
+}
+
+// processFiles downloads and imports each file from the CDN metadata.
+func (b *CDNBootstrapper) processFiles(ctx context.Context, cm *ChainManager,
+	metadata *chaintracks.CDNMetadata, startFileIndex uint32,
+) error {
 	for i, fileEntry := range metadata.Files {
-		if uint32(i) < startFileIndex {
+		if i > math.MaxUint32 || uint32(i) < startFileIndex { //nolint:gosec // overflow checked
 			continue // Already have this file's headers
 		}
 
@@ -131,39 +156,48 @@ func (b *CDNBootstrapper) Bootstrap(ctx context.Context, cm *ChainManager) error
 		default:
 		}
 
-		log.Printf("Downloading %s (file %d/%d)", fileEntry.FileName, i+1, len(metadata.Files))
-
-		data, err := b.FetchHeadersFile(ctx, fileEntry.FileName)
-		if err != nil {
-			return fmt.Errorf("failed to download %s: %w", fileEntry.FileName, err)
+		if err := b.processFileEntry(ctx, cm, fileEntry, i, len(metadata.Files)); err != nil {
+			return err
 		}
+	}
+	return nil
+}
 
-		// Parse headers from binary data
-		headers, err := parseHeadersFromBytes(data)
-		if err != nil {
-			return fmt.Errorf("failed to parse headers from %s: %w", fileEntry.FileName, err)
-		}
+// processFileEntry downloads and imports a single header file.
+func (b *CDNBootstrapper) processFileEntry(ctx context.Context, cm *ChainManager,
+	fileEntry chaintracks.CDNFileEntry, index, total int,
+) error {
+	log.Printf("Downloading %s (file %d/%d)", fileEntry.FileName, index+1, total)
 
-		// Convert to BlockHeaders with heights and chainwork
-		blockHeaders, err := b.convertToBlockHeaders(ctx, cm, headers, fileEntry.FirstHeight)
-		if err != nil {
-			return fmt.Errorf("failed to convert headers from %s: %w", fileEntry.FileName, err)
-		}
-
-		// Import into chain manager
-		if err := cm.SetChainTip(ctx, blockHeaders); err != nil {
-			return fmt.Errorf("failed to set chain tip from %s: %w", fileEntry.FileName, err)
-		}
-
-		log.Printf("Imported %d headers from %s (height %d-%d)",
-			len(blockHeaders), fileEntry.FileName,
-			fileEntry.FirstHeight, fileEntry.FirstHeight+uint32(len(blockHeaders))-1)
+	data, err := b.FetchHeadersFile(ctx, fileEntry.FileName)
+	if err != nil {
+		return fmt.Errorf("failed to download %s: %w", fileEntry.FileName, err)
 	}
 
-	tip := cm.GetTip(ctx)
-	if tip != nil {
-		log.Printf("CDN bootstrap complete. Chain tip: height=%d hash=%s", tip.Height, tip.Hash.String())
+	// Parse headers from binary data
+	headers, err := parseHeadersFromBytes(data)
+	if err != nil {
+		return fmt.Errorf("failed to parse headers from %s: %w", fileEntry.FileName, err)
 	}
+
+	// Convert to BlockHeaders with heights and chainwork
+	blockHeaders, err := b.convertToBlockHeaders(ctx, cm, headers, fileEntry.FirstHeight)
+	if err != nil {
+		return fmt.Errorf("failed to convert headers from %s: %w", fileEntry.FileName, err)
+	}
+
+	// Import into chain manager
+	if err := cm.SetChainTip(ctx, blockHeaders); err != nil {
+		return fmt.Errorf("failed to set chain tip from %s: %w", fileEntry.FileName, err)
+	}
+
+	headerCount := len(blockHeaders)
+	if headerCount > math.MaxUint32 {
+		headerCount = math.MaxUint32
+	}
+	log.Printf("Imported %d headers from %s (height %d-%d)",
+		headerCount, fileEntry.FileName,
+		fileEntry.FirstHeight, fileEntry.FirstHeight+uint32(headerCount)-1) //nolint:gosec // overflow checked
 
 	return nil
 }
@@ -187,8 +221,8 @@ func parseHeadersFromBytes(data []byte) ([]*block.Header, error) {
 
 // convertToBlockHeaders converts raw headers to BlockHeaders with height and chainwork.
 func (b *CDNBootstrapper) convertToBlockHeaders(ctx context.Context, cm *ChainManager,
-	headers []*block.Header, firstHeight uint32) ([]*chaintracks.BlockHeader, error) {
-
+	headers []*block.Header, firstHeight uint32,
+) ([]*chaintracks.BlockHeader, error) {
 	blockHeaders := make([]*chaintracks.BlockHeader, 0, len(headers))
 
 	var prevChainWork *big.Int
@@ -203,7 +237,10 @@ func (b *CDNBootstrapper) convertToBlockHeaders(ctx context.Context, cm *ChainMa
 	}
 
 	for i, header := range headers {
-		height := firstHeight + uint32(i)
+		if i > math.MaxUint32 {
+			break // Prevent overflow
+		}
+		height := firstHeight + uint32(i) //nolint:gosec // overflow checked
 
 		var chainWork *big.Int
 		if height == 0 {

@@ -151,13 +151,13 @@ func TestCDNBootstrapperFetchMetadata(t *testing.T) {
 			metadata, err := b.FetchMetadata(context.Background())
 
 			if tt.expectedError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, metadata)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				require.NotNil(t, metadata)
 				assert.Equal(t, tt.expectedMeta.HeadersPerFile, metadata.HeadersPerFile)
-				assert.Equal(t, len(tt.expectedMeta.Files), len(metadata.Files))
+				assert.Len(t, metadata.Files, len(tt.expectedMeta.Files))
 			}
 		})
 	}
@@ -247,10 +247,10 @@ func TestCDNBootstrapperFetchHeadersFile(t *testing.T) {
 			data, err := b.FetchHeadersFile(context.Background(), tt.fileName)
 
 			if tt.expectedError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, data)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Len(t, data, tt.expectedLen)
 			}
 		})
@@ -305,7 +305,7 @@ func TestParseHeadersFromBytes(t *testing.T) {
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Len(t, headers, tt.expectedCount)
 			}
 		})
@@ -369,12 +369,12 @@ func TestCDNBootstrapperConvertToBlockHeaders(t *testing.T) {
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				require.Len(t, blockHeaders, tt.headers)
 
 				// Verify heights are set correctly
 				for i, bh := range blockHeaders {
-					assert.Equal(t, tt.firstHeight+uint32(i), bh.Height)
+					assert.Equal(t, tt.firstHeight+uint32(i), bh.Height) //nolint:gosec // test data is small
 					assert.NotNil(t, bh.ChainWork)
 				}
 			}
@@ -470,7 +470,7 @@ func TestCDNBootstrapperBootstrapIntegration(t *testing.T) {
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				// Verify chain tip was set
 				tip := cm.GetTip(context.Background())
 				assert.NotNil(t, tip)
