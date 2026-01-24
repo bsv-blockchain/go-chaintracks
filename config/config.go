@@ -24,6 +24,7 @@ func (c *Config) SetDefaults(v *viper.Viper, configPath string) {
 	v.SetDefault(prefix+"mode", "embedded")
 	v.SetDefault(prefix+"storage_path", "~/.chaintracks")
 	v.SetDefault(prefix+"bootstrap_url", "")
+	v.SetDefault(prefix+"bootstrap_mode", "api")
 	c.P2P.SetDefaults(v, prefix+"p2p")
 }
 
@@ -68,7 +69,7 @@ func (c *Config) Initialize(ctx context.Context, name string, p2pClient *p2p.Cli
 			}
 		}
 
-		return chainmanager.New(ctx, p2pClient.GetNetwork(), c.StoragePath, p2pClient, c.BootstrapURL)
+		return chainmanager.New(ctx, p2pClient.GetNetwork(), c.StoragePath, p2pClient, c.BootstrapURL, string(c.BootstrapMode))
 
 	default:
 		return nil, fmt.Errorf("%w: %s", chaintracks.ErrUnknownChaintracksMode, c.Mode)

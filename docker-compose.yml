@@ -1,0 +1,73 @@
+# Go ChainTracks Service
+#
+# Drop-in replacement for the TypeScript chaintracks-server
+# Now with full CDN feature parity!
+#
+# Quick Start:
+#   docker compose up -d
+#
+# Services:
+#   - ChaintracksService API: http://localhost:3011
+#   - CDN Server: http://localhost:3012 (when enabled)
+#
+# Configuration:
+#   Copy env.docker to .env and customize if needed
+
+services:
+  chaintracks-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chaintracks-server
+    restart: unless-stopped
+    ports:
+      - "3011:3011" # ChaintracksService API
+      - "3012:3012" # CDN Server (static header files)
+    environment:
+      # Server ports
+      - CHAINTRACKS_PORT=3011
+      - CHAINTRACKS_CDN_PORT=3012
+      - CHAINTRACKS_CDN_ENABLED=${CDN_ENABLED:-true}
+
+      # Chain configuration (main or test)
+      - CHAINTRACKS_CHAINTRACKS_P2P_NETWORK=${CHAIN:-main}
+
+      # Storage path for blockchain data
+      - CHAINTRACKS_CHAINTRACKS_STORAGE_PATH=/data/chaintracks
+
+      # Mode: embedded (local chainmanager) or remote (connect to server)
+      - CHAINTRACKS_CHAINTRACKS_MODE=${CHAINTRACKS_MODE:-embedded}
+
+      # Bootstrap configuration
+      # bootstrap_mode: "api" (gorillanode-style) or "cdn" (TypeScript CDN format)
+      - CHAINTRACKS_CHAINTRACKS_BOOTSTRAP_URL=${BOOTSTRAP_URL:-}
+      - CHAINTRACKS_CHAINTRACKS_BOOTSTRAP_MODE=${BOOTSTRAP_MODE:-cdn}
+
+      # Logging level
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+
+    volumes:
+      # Persist blockchain data across container restarts
+      - chaintracks-data:/data/chaintracks
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3011/v2/network"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Resource limits (Go is more efficient than Node.js)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+volumes:
+  # Named volume to persist blockchain data
+  chaintracks-data:
+    driver: local

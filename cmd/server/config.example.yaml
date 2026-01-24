@@ -2,8 +2,12 @@
 # Environment variables can override any setting using CHAINTRACKS_ prefix
 # Example: CHAINTRACKS_PORT=8080 overrides port
 
-# HTTP server port
+# HTTP API server port
 port: 3011
+
+# CDN static file server
+cdn_enabled: false # Enable CDN server for static header files
+cdn_port: 3012 # CDN server port (same as TypeScript)
 
 chaintracks:
   # Mode: "embedded" runs chainmanager locally, "remote" connects to a chaintracks server
@@ -15,5 +19,12 @@ chaintracks:
   # Remote server URL (required for remote mode)
   # url: http://localhost:3011
 
-  # Bootstrap URL for initial header sync (embedded mode)
-  # bootstrap_url: https://example.com/headers.bin
+  # Bootstrap configuration for initial header sync (embedded mode)
+  #
+  # CDN-style bootstrap (TypeScript CDN format):
+  # bootstrap_url: https://chaintracks-cdn-us-1.bsvb.tech
+  # bootstrap_mode: cdn
+  #
+  # API-style bootstrap (gorillanode format):
+  # bootstrap_url: https://mainnet.gorillanode.io/api/v1
+  # bootstrap_mode: api

@@ -1,73 +1,58 @@
-##
-## Specific to .dockerignore
-##
+# Git
+.git
+.gitignore
 
-.git/
-Dockerfile
-contrib/
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
 
-##
-## Common with .gitignore
-##
+# Environment and secrets
+.env
+.env.*
+*.env
+env.docker
+*.pem
+*.key
+credentials*
+secrets*
+
+# Build artifacts
+bin/
+dist/
+*.exe
+server
+
+# Test and development files
+*_test.go
+coverage.*
+*.cover
+*.out
+.coverage
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
 
 # Temporary files
-*~
-*#
-.#*
+tmp/
+temp/
+*.tmp
+*.log
 
-# Vendors
-node_modules/
-vendor/
+# Local configuration
+settings.conf
+settings_local.conf
+config.yaml
+!cmd/server/config.example.yaml
 
-# Binaries for programs and plugins
-dist/
-gin-bin
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Byte-compiled / optimized / DLL files
-__pycache__/
-**/__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.py[cod]
-*$py.class
-.pytest_cache/
-.mypy_cache/
-
-# Test binary, build with `go test -c`
-*.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
-*.out
-
-# Virtual environments
-.venv
-../venv
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
-
-# Temporary directories in the project
-bin
-tmp
-
-# Project files not needed in the container
-.cursorrules
-.editorconfig
-.github
-.gitpod.yml
-.golangci.json
-.golangci.yml
-.goreleaser.yml
-.vscode
-docs
-LICENSE
-README.md
-codecov.yml
+# Data directories
+data/
+.chaintracks/
