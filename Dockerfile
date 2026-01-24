@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25-alpine@sha256:5dffbd69b37b8e9fc35d94817e94bc7bf4fd047147e3c5353d357bd3492992bf AS builder
+FROM golang:1.25-alpine@sha256:d9b2e14101f27ec8d09674cd01186798d227bb0daec90e032aeb1cd22ac0f029 AS builder
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server ./cmd/server
 
 # Production stage
-FROM alpine:3.21
+FROM alpine:3.23
 
 WORKDIR /app
 
