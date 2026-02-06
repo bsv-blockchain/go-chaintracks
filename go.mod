@@ -20,6 +20,8 @@ replace github.com/joho/godotenv => github.com/joho/godotenv v1.5.1
 
 replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.4.0
 
+replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.40.0 // CVE-2026-24051: Path Hijacking fix
+
 require (
 	github.com/IBM/sarama v1.46.3 // indirect
 	github.com/aerospike/aerospike-client-go/v8 v8.5.1 // indirect
@@ -233,12 +235,12 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.64.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.64.0 // indirect
-	go.opentelemetry.io/otel v1.39.0 // indirect
+	go.opentelemetry.io/otel v1.40.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.39.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.39.0 // indirect
-	go.opentelemetry.io/otel/metric v1.39.0 // indirect
+	go.opentelemetry.io/otel/metric v1.40.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.39.0 // indirect
-	go.opentelemetry.io/otel/trace v1.39.0 // indirect
+	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/dig v1.19.0 // indirect
