@@ -39,7 +39,7 @@ jobs:
     steps:
       # Step 1: checkout code
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Step 2: login to GCHR
       - name: Log in to GitHub Container Registry
@@ -51,7 +51,7 @@ jobs:
 
       # Step 3: Build and push the Docker image
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: . # Build context (root directory, adjust if Dockerfile is elsewhere)
           file: ./Dockerfile # Path to Dockerfile
