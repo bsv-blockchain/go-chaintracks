@@ -66,7 +66,7 @@ func getGenesisHeader(network string) (*block.Header, error) {
 		data = genesisMainnet
 	case "test":
 		data = genesisTestnet
-	case "teratest":
+	case "teratest", "teratestnet":
 		data = genesisTeratestnet
 	default:
 		return nil, fmt.Errorf("%w: %s", chaintracks.ErrUnknownNetwork, network)
