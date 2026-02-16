@@ -4,7 +4,7 @@ go 1.25.4
 
 require (
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.9
-	github.com/bsv-blockchain/go-sdk v1.2.17
+	github.com/bsv-blockchain/go-sdk v1.2.18
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.1.1
 	github.com/bsv-blockchain/teranode v0.13.2
 	github.com/gofiber/fiber/v2 v2.52.11
