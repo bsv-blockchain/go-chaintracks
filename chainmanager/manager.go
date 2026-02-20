@@ -342,7 +342,7 @@ func (cm *ChainManager) pruneOrphans() {
 	for hash, header := range cm.byHash {
 		// Check if it's in the main chain
 		chainLen := len(cm.byHeight)
-		if chainLen <= 0xFFFFFFFF && header.Height < uint32(chainLen) && cm.byHeight[header.Height] == hash {
+		if chainLen <= 0xFFFFFFFF && header.Height < uint32(chainLen) && cm.byHeight[header.Height] == hash { //nolint:gosec // overflow checked above
 			continue
 		}
 		// It's an orphan, check if too old
