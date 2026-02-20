@@ -219,7 +219,7 @@ func (c *Client) runSSE(ctx context.Context) {
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Connection", "keep-alive")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is validated at client construction time
 	if err != nil {
 		return
 	}
@@ -245,7 +245,7 @@ func (c *Client) runReorgSSE(ctx context.Context) {
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Connection", "keep-alive")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is validated at client construction time
 	if err != nil {
 		return
 	}
@@ -421,7 +421,7 @@ func (c *Client) fetchTip(ctx context.Context) (*chaintracks.BlockHeader, error)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is validated at client construction time
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tip: %w", err)
 	}
@@ -467,7 +467,7 @@ func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chain
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is validated at client construction time
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch headers: %w", err)
 	}
@@ -495,7 +495,7 @@ func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chain
 		headerIndex := i / 80
 		headers = append(headers, &chaintracks.BlockHeader{
 			Header: h,
-			Height: height + uint32(headerIndex), //nolint:gosec // headerIndex is bounded by response size
+			Height: height + uint32(headerIndex),
 			Hash:   h.Hash(),
 		})
 	}
@@ -510,7 +510,7 @@ func (c *Client) fetchHeader(ctx context.Context, url string) (*chaintracks.Bloc
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is validated at client construction time
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch header: %w", err)
 	}
@@ -557,7 +557,7 @@ func (c *Client) GetNetwork(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is validated at client construction time
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch network: %w", err)
 	}

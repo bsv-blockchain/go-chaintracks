@@ -721,7 +721,7 @@ func TestChainManagerPruneOrphans(t *testing.T) {
 
 				// Create multiple recent orphans (none should be pruned)
 				for i := uint32(250); i < 260; i++ {
-					hash := chainhash.Hash{0x03, byte(i)}
+					hash := chainhash.Hash{0x03, byte(i)} //nolint:gosec // i is bounded by loop range, safe for byte
 					orphan := &chaintracks.BlockHeader{
 						Header: &block.Header{},
 						Height: i,
@@ -746,7 +746,7 @@ func TestChainManagerPruneOrphans(t *testing.T) {
 
 				// Verify recent orphans remain
 				for i := uint32(250); i < 260; i++ {
-					hash := chainhash.Hash{0x03, byte(i)}
+					hash := chainhash.Hash{0x03, byte(i)} //nolint:gosec // i is bounded by loop range, safe for byte
 					_, exists := cm.byHash[hash]
 					assert.True(t, exists, "Recent orphan at height %d should be preserved", i)
 				}

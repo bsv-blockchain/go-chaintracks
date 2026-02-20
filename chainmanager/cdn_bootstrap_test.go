@@ -374,7 +374,7 @@ func TestCDNBootstrapperConvertToBlockHeaders(t *testing.T) {
 
 				// Verify heights are set correctly
 				for i, bh := range blockHeaders {
-					assert.Equal(t, tt.firstHeight+uint32(i), bh.Height) //nolint:gosec // test data is small
+					assert.Equal(t, tt.firstHeight+uint32(i), bh.Height)
 					assert.NotNil(t, bh.ChainWork)
 				}
 			}

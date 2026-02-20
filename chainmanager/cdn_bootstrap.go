@@ -57,7 +57,7 @@ func (b *CDNBootstrapper) FetchMetadata(ctx context.Context) (*chaintracks.CDNMe
 		return nil, fmt.Errorf("failed to create metadata request: %w", err)
 	}
 
-	resp, err := b.httpClient.Do(req)
+	resp, err := b.httpClient.Do(req) //nolint:gosec // URL is validated at bootstrapper construction time
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch metadata: %w", err)
 	}
@@ -85,7 +85,7 @@ func (b *CDNBootstrapper) FetchHeadersFile(ctx context.Context, fileName string)
 		return nil, fmt.Errorf("failed to create file request: %w", err)
 	}
 
-	resp, err := b.httpClient.Do(req)
+	resp, err := b.httpClient.Do(req) //nolint:gosec // URL is validated at bootstrapper construction time
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch file %s: %w", fileName, err)
 	}
@@ -146,7 +146,7 @@ func (b *CDNBootstrapper) processFiles(ctx context.Context, cm *ChainManager,
 	metadata *chaintracks.CDNMetadata, startFileIndex uint32,
 ) error {
 	for i, fileEntry := range metadata.Files {
-		if i > math.MaxUint32 || uint32(i) < startFileIndex { //nolint:gosec // overflow checked
+		if i > math.MaxUint32 || uint32(i) < startFileIndex {
 			continue // Already have this file's headers
 		}
 
@@ -197,7 +197,7 @@ func (b *CDNBootstrapper) processFileEntry(ctx context.Context, cm *ChainManager
 	}
 	log.Printf("Imported %d headers from %s (height %d-%d)",
 		headerCount, fileEntry.FileName,
-		fileEntry.FirstHeight, fileEntry.FirstHeight+uint32(headerCount)-1) //nolint:gosec // overflow checked
+		fileEntry.FirstHeight, fileEntry.FirstHeight+uint32(headerCount)-1)
 
 	return nil
 }
@@ -240,7 +240,7 @@ func (b *CDNBootstrapper) convertToBlockHeaders(ctx context.Context, cm *ChainMa
 		if i > math.MaxUint32 {
 			break // Prevent overflow
 		}
-		height := firstHeight + uint32(i) //nolint:gosec // overflow checked
+		height := firstHeight + uint32(i)
 
 		var chainWork *big.Int
 		if height == 0 {

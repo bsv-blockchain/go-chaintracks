@@ -99,7 +99,7 @@ func (cm *ChainManager) loadFromLocalFiles(ctx context.Context) error {
 		}
 
 		for i, header := range headers {
-			height := fileEntry.FirstHeight + uint32(i) //nolint:gosec // Loop index bounded by slice length
+			height := fileEntry.FirstHeight + uint32(i)
 
 			var chainWork *big.Int
 			if height == 0 {
