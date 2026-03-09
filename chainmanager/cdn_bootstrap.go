@@ -57,7 +57,7 @@ func (b *CDNBootstrapper) FetchMetadata(ctx context.Context) (*chaintracks.CDNMe
 		return nil, fmt.Errorf("failed to create metadata request: %w", err)
 	}
 
-	resp, err := b.httpClient.Do(req) //nolint:gosec // URL is validated at bootstrapper construction time
+	resp, err := b.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch metadata: %w", err)
 	}
@@ -85,7 +85,7 @@ func (b *CDNBootstrapper) FetchHeadersFile(ctx context.Context, fileName string)
 		return nil, fmt.Errorf("failed to create file request: %w", err)
 	}
 
-	resp, err := b.httpClient.Do(req) //nolint:gosec // URL is validated at bootstrapper construction time
+	resp, err := b.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch file %s: %w", fileName, err)
 	}

@@ -166,7 +166,7 @@ func FetchLatestBlock(ctx context.Context, baseURL string) (chainhash.Hash, erro
 		return chainhash.Hash{}, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req) //nolint:gosec // URL is constructed from trusted configuration
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return chainhash.Hash{}, fmt.Errorf("failed to fetch best block header: %w", err)
 	}

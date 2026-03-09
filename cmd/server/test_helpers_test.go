@@ -90,7 +90,7 @@ func copyTestData(t *testing.T, srcDir, dstDir string) {
 		require.NoError(t, err, "Failed to read testdata file")
 
 		dstFile := filepath.Join(dstDir, filepath.Base(srcFile))
-		err = os.WriteFile(dstFile, data, 0o600)
+		err = os.WriteFile(dstFile, data, 0o600) //nolint:gosec // G703: path constructed with filepath.Base prevents traversal
 		require.NoError(t, err, "Failed to write testdata file")
 	}
 }
@@ -105,7 +105,7 @@ type testResponse struct {
 // httpGet performs a GET request and returns the response data
 func httpGet(t *testing.T, app *fiber.App, path string) testResponse {
 	t.Helper()
-	req := httptest.NewRequest("GET", path, nil)
+	req := httptest.NewRequestWithContext(t.Context(), "GET", path, nil)
 	resp, err := app.Test(req)
 	require.NoError(t, err, "Failed to make request")
 
