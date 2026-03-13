@@ -547,6 +547,10 @@ func (c *Client) GetNetwork(ctx context.Context) (string, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
+	}
+
 	var response struct {
 		Network string `json:"network"`
 	}
