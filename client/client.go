@@ -532,20 +532,32 @@ func (c *Client) fetchHeader(ctx context.Context, url string) (*chaintracks.Bloc
 		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
 	}
 
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Try wrapped response format first (backwards compatibility)
 	var response struct {
 		Status string                   `json:"status"`
 		Value  *chaintracks.BlockHeader `json:"value"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	if err := json.Unmarshal(data, &response); err == nil && response.Status == "success" && response.Value != nil {
+		return response.Value, nil
+	}
+
+	// Fall back to raw BlockHeader format
+	var header chaintracks.BlockHeader
+	if err := json.Unmarshal(data, &header); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	if response.Status != "success" || response.Value == nil {
+	if header.Hash.IsEqual(&chainhash.Hash{}) {
 		return nil, chaintracks.ErrHeaderNotFound
 	}
 
-	return response.Value, nil
+	return &header, nil
 }
 
 // IsValidRootForHeight implements the ChainTracker interface.
@@ -575,18 +587,33 @@ func (c *Client) GetNetwork(ctx context.Context) (string, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	var response struct {
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Try wrapped response format first (backwards compatibility)
+	var wrappedResponse struct {
 		Status string `json:"status"`
 		Value  string `json:"value"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	if err := json.Unmarshal(data, &wrappedResponse); err == nil && wrappedResponse.Status == "success" && wrappedResponse.Value != "" {
+		return wrappedResponse.Value, nil
+	}
+
+	// Fall back to raw format
+	var rawResponse struct {
+		Network string `json:"network"`
+	}
+
+	if err := json.Unmarshal(data, &rawResponse); err != nil {
 		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	if response.Status != "success" {
+	if rawResponse.Network == "" {
 		return "", chaintracks.ErrServerReturnedError
 	}
 
-	return response.Value, nil
+	return rawResponse.Network, nil
 }
