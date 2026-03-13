@@ -431,29 +431,9 @@ func (c *Client) fetchTip(ctx context.Context) (*chaintracks.BlockHeader, error)
 		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	// Try wrapped response format first (backwards compatibility)
-	var response struct {
-		Status string                   `json:"status"`
-		Value  *chaintracks.BlockHeader `json:"value"`
-	}
-
-	if err := json.Unmarshal(data, &response); err == nil && response.Status == "success" && response.Value != nil {
-		return response.Value, nil
-	}
-
-	// Fall back to raw BlockHeader format
 	var header chaintracks.BlockHeader
-	if err := json.Unmarshal(data, &header); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&header); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if header.Hash.IsEqual(&chainhash.Hash{}) {
-		return nil, chaintracks.ErrHeaderNotFound
 	}
 
 	return &header, nil
@@ -532,29 +512,9 @@ func (c *Client) fetchHeader(ctx context.Context, url string) (*chaintracks.Bloc
 		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	// Try wrapped response format first (backwards compatibility)
-	var response struct {
-		Status string                   `json:"status"`
-		Value  *chaintracks.BlockHeader `json:"value"`
-	}
-
-	if err := json.Unmarshal(data, &response); err == nil && response.Status == "success" && response.Value != nil {
-		return response.Value, nil
-	}
-
-	// Fall back to raw BlockHeader format
 	var header chaintracks.BlockHeader
-	if err := json.Unmarshal(data, &header); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&header); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if header.Hash.IsEqual(&chainhash.Hash{}) {
-		return nil, chaintracks.ErrHeaderNotFound
 	}
 
 	return &header, nil
@@ -587,33 +547,17 @@ func (c *Client) GetNetwork(ctx context.Context) (string, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	// Try wrapped response format first (backwards compatibility)
-	var wrappedResponse struct {
-		Status string `json:"status"`
-		Value  string `json:"value"`
-	}
-
-	if err := json.Unmarshal(data, &wrappedResponse); err == nil && wrappedResponse.Status == "success" && wrappedResponse.Value != "" {
-		return wrappedResponse.Value, nil
-	}
-
-	// Fall back to raw format
-	var rawResponse struct {
+	var response struct {
 		Network string `json:"network"`
 	}
 
-	if err := json.Unmarshal(data, &rawResponse); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	if rawResponse.Network == "" {
+	if response.Network == "" {
 		return "", chaintracks.ErrServerReturnedError
 	}
 
-	return rawResponse.Network, nil
+	return response.Network, nil
 }
