@@ -41,7 +41,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      # Step 2: login to GCHR
+      # Step 2: Set up QEMU for multi-architecture builds
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+
+      # Step 3: Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      # Step 4: login to GCHR
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
         with:
@@ -49,12 +57,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 3: Build and push the Docker image
+      # Step 5: Build and push the Docker image
       - name: Build and push Docker image
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: . # Build context (root directory, adjust if Dockerfile is elsewhere)
           file: ./Dockerfile # Path to Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }} # Only push on push events, not PRs
           tags: |
             ghcr.io/bsv-blockchain/go-chaintracks:${{ github.sha }}
