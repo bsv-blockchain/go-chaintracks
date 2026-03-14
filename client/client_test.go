@@ -116,16 +116,10 @@ func TestClientGetTip(t *testing.T) {
 	t.Run("FetchesTipFromServerWhenNotCached", func(t *testing.T) {
 		expectedHash := chainhash.Hash{4, 5, 6}
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			resp := struct {
-				Status string                   `json:"status"`
-				Value  *chaintracks.BlockHeader `json:"value"`
-			}{
-				Status: "success",
-				Value: &chaintracks.BlockHeader{
-					Header: &block.Header{},
-					Height: 999,
-					Hash:   expectedHash,
-				},
+			resp := &chaintracks.BlockHeader{
+				Header: &block.Header{},
+				Height: 999,
+				Hash:   expectedHash,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -192,11 +186,8 @@ func TestClientGetHeaderByHeight(t *testing.T) {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					assert.Equal(t, "/v2/header/height/100", r.URL.Path)
 					response := map[string]interface{}{
-						"status": "success",
-						"value": map[string]interface{}{
-							"height": 100,
-							"hash":   "0101010101010101010101010101010101010101010101010101010101010101",
-						},
+						"height": 100,
+						"hash":   "0101010101010101010101010101010101010101010101010101010101010101",
 					}
 					w.Header().Set("Content-Type", "application/json")
 					_ = json.NewEncoder(w).Encode(response)
@@ -206,41 +197,21 @@ func TestClientGetHeaderByHeight(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name:   "ReturnsErrorWhenServerReturnsNonSuccess",
+			name:   "ReturnsErrorWhenServerReturnsNotFound",
 			height: 200,
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					response := map[string]interface{}{
-						"status": "error",
-						"value":  nil,
-					}
-					w.Header().Set("Content-Type", "application/json")
-					_ = json.NewEncoder(w).Encode(response)
+					w.WriteHeader(http.StatusNotFound)
 				}))
 			},
-			expectedError: chaintracks.ErrHeaderNotFound,
-		},
-		{
-			name:   "ReturnsErrorWhenServerReturnsNilValue",
-			height: 300,
-			setupServer: func() *httptest.Server {
-				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					response := map[string]interface{}{
-						"status": "success",
-						"value":  nil,
-					}
-					w.Header().Set("Content-Type", "application/json")
-					_ = json.NewEncoder(w).Encode(response)
-				}))
-			},
-			expectedError: chaintracks.ErrHeaderNotFound,
+			expectedError: chaintracks.ErrServerRequestFailed,
 		},
 		{
 			name:   "ReturnsErrorWhenServerReturnsNonOKStatus",
 			height: 400,
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					w.WriteHeader(http.StatusNotFound)
+					w.WriteHeader(http.StatusInternalServerError)
 				}))
 			},
 			expectedError: chaintracks.ErrServerRequestFailed,
@@ -286,11 +257,8 @@ func TestClientGetHeaderByHash(t *testing.T) {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					assert.Equal(t, "/v2/header/hash/0101010101010101010101010101010101010101010101010101010101010101", r.URL.Path)
 					response := map[string]interface{}{
-						"status": "success",
-						"value": map[string]interface{}{
-							"height": 100,
-							"hash":   "0101010101010101010101010101010101010101010101010101010101010101",
-						},
+						"height": 100,
+						"hash":   "0101010101010101010101010101010101010101010101010101010101010101",
 					}
 					w.Header().Set("Content-Type", "application/json")
 					_ = json.NewEncoder(w).Encode(response)
@@ -300,19 +268,14 @@ func TestClientGetHeaderByHash(t *testing.T) {
 			expectedError:  nil,
 		},
 		{
-			name: "ReturnsErrorWhenServerReturnsNonSuccess",
+			name: "ReturnsErrorWhenServerReturnsNotFound",
 			hash: &testHash,
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					response := map[string]interface{}{
-						"status": "error",
-						"value":  nil,
-					}
-					w.Header().Set("Content-Type", "application/json")
-					_ = json.NewEncoder(w).Encode(response)
+					w.WriteHeader(http.StatusNotFound)
 				}))
 			},
-			expectedError: chaintracks.ErrHeaderNotFound,
+			expectedError: chaintracks.ErrServerRequestFailed,
 		},
 	}
 
@@ -351,14 +314,13 @@ func TestClientGetNetwork(t *testing.T) {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					assert.Equal(t, "/v2/network", r.URL.Path)
 					response := map[string]interface{}{
-						"status": "success",
-						"value":  "mainnet",
+						"network": "main",
 					}
 					w.Header().Set("Content-Type", "application/json")
 					_ = json.NewEncoder(w).Encode(response)
 				}))
 			},
-			expectedNetwork: "mainnet",
+			expectedNetwork: "main",
 			expectedError:   nil,
 		},
 		{
@@ -366,29 +328,23 @@ func TestClientGetNetwork(t *testing.T) {
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					response := map[string]interface{}{
-						"status": "success",
-						"value":  "testnet",
+						"network": "test",
 					}
 					w.Header().Set("Content-Type", "application/json")
 					_ = json.NewEncoder(w).Encode(response)
 				}))
 			},
-			expectedNetwork: "testnet",
+			expectedNetwork: "test",
 			expectedError:   nil,
 		},
 		{
-			name: "ReturnsErrorWhenServerReturnsNonSuccess",
+			name: "ReturnsErrorWhenServerReturnsNotFound",
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					response := map[string]interface{}{
-						"status": "error",
-						"value":  "",
-					}
-					w.Header().Set("Content-Type", "application/json")
-					_ = json.NewEncoder(w).Encode(response)
+					w.WriteHeader(http.StatusNotFound)
 				}))
 			},
-			expectedError: chaintracks.ErrServerReturnedError,
+			expectedError: chaintracks.ErrServerRequestFailed,
 		},
 	}
 
@@ -455,12 +411,9 @@ func TestClientIsValidRootForHeight(t *testing.T) {
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					response := map[string]interface{}{
-						"status": "success",
-						"value": map[string]interface{}{
-							"height":     100,
-							"hash":       "0101010101010101010101010101010101010101010101010101010101010101",
-							"merkleRoot": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-						},
+						"height":     100,
+						"hash":       "0101010101010101010101010101010101010101010101010101010101010101",
+						"merkleRoot": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 					}
 					w.Header().Set("Content-Type", "application/json")
 					_ = json.NewEncoder(w).Encode(response)
@@ -476,12 +429,9 @@ func TestClientIsValidRootForHeight(t *testing.T) {
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					response := map[string]interface{}{
-						"status": "success",
-						"value": map[string]interface{}{
-							"height":     100,
-							"hash":       "0101010101010101010101010101010101010101010101010101010101010101",
-							"merkleRoot": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-						},
+						"height":     100,
+						"hash":       "0101010101010101010101010101010101010101010101010101010101010101",
+						"merkleRoot": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 					}
 					w.Header().Set("Content-Type", "application/json")
 					_ = json.NewEncoder(w).Encode(response)
@@ -496,18 +446,13 @@ func TestClientIsValidRootForHeight(t *testing.T) {
 			name: "ReturnsErrorWhenHeaderNotFound",
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					response := map[string]interface{}{
-						"status": "error",
-						"value":  nil,
-					}
-					w.Header().Set("Content-Type", "application/json")
-					_ = json.NewEncoder(w).Encode(response)
+					w.WriteHeader(http.StatusNotFound)
 				}))
 			},
 			root:          &validRoot,
 			height:        100,
 			expectedValid: false,
-			expectedError: chaintracks.ErrHeaderNotFound,
+			expectedError: chaintracks.ErrServerRequestFailed,
 		},
 	}
 

@@ -133,7 +133,7 @@ go get -u github.com/bsv-blockchain/go-chaintracks
 <summary><strong><code>Usage as a Library</code></strong></summary>
 
 ```go
-import "github.com/bsv-blockchain/go-chaintracks/pkg/chaintracks"
+import "github.com/bsv-blockchain/go-chaintracks/chaintracks"
 
 // Create chain manager with local storage
 // Network options: "main", "test", "teratest"

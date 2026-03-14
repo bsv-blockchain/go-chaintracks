@@ -431,20 +431,12 @@ func (c *Client) fetchTip(ctx context.Context) (*chaintracks.BlockHeader, error)
 		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
 	}
 
-	var response struct {
-		Status string                   `json:"status"`
-		Value  *chaintracks.BlockHeader `json:"value"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	var header chaintracks.BlockHeader
+	if err := json.NewDecoder(resp.Body).Decode(&header); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	if response.Status != "success" || response.Value == nil {
-		return nil, chaintracks.ErrHeaderNotFound
-	}
-
-	return response.Value, nil
+	return &header, nil
 }
 
 // GetHeaderByHeight retrieves a header by height from the server.
@@ -520,20 +512,12 @@ func (c *Client) fetchHeader(ctx context.Context, url string) (*chaintracks.Bloc
 		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
 	}
 
-	var response struct {
-		Status string                   `json:"status"`
-		Value  *chaintracks.BlockHeader `json:"value"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	var header chaintracks.BlockHeader
+	if err := json.NewDecoder(resp.Body).Decode(&header); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	if response.Status != "success" || response.Value == nil {
-		return nil, chaintracks.ErrHeaderNotFound
-	}
-
-	return response.Value, nil
+	return &header, nil
 }
 
 // IsValidRootForHeight implements the ChainTracker interface.
@@ -563,18 +547,21 @@ func (c *Client) GetNetwork(ctx context.Context) (string, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
+	}
+
 	var response struct {
-		Status string `json:"status"`
-		Value  string `json:"value"`
+		Network string `json:"network"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	if response.Status != "success" {
+	if response.Network == "" {
 		return "", chaintracks.ErrServerReturnedError
 	}
 
-	return response.Value, nil
+	return response.Network, nil
 }
