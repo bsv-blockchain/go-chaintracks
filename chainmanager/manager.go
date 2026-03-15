@@ -327,6 +327,15 @@ func (cm *ChainManager) reorgBroadcast(reorgEvent *chaintracks.ReorgEvent) {
 	}
 }
 
+// isOnMainChain checks if a header is part of the main chain (in byHeight), not just an orphan in byHash.
+func (cm *ChainManager) isOnMainChain(ctx context.Context, header *chaintracks.BlockHeader) bool {
+	mainChainHeader, err := cm.GetHeaderByHeight(ctx, header.Height)
+	if err != nil {
+		return false
+	}
+	return mainChainHeader.Hash == header.Hash
+}
+
 // pruneOrphans removes old orphaned headers (must be called with lock held).
 func (cm *ChainManager) pruneOrphans() {
 	if cm.tip == nil {

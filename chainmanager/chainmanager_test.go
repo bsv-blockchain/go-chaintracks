@@ -2,6 +2,7 @@ package chainmanager
 
 import (
 	"context"
+	"math/big"
 	"testing"
 	"time"
 
@@ -1099,4 +1100,116 @@ func TestReorgFanOut_BroadcastEventsFromChannelToAllSubscribers(t *testing.T) {
 			return false
 		}
 	}, time.Second, 10*time.Millisecond, "ch2 should receive event")
+}
+
+func TestIsOnMainChain(t *testing.T) {
+	hashMain := chainhash.Hash{0x01}
+	hashOrphan := chainhash.Hash{0x02}
+
+	mainHeader := &chaintracks.BlockHeader{Header: &block.Header{}, Height: 5, Hash: hashMain}
+	orphanHeader := &chaintracks.BlockHeader{Header: &block.Header{}, Height: 5, Hash: hashOrphan}
+
+	cm := &ChainManager{
+		byHeight: make([]chainhash.Hash, 6),
+		byHash: map[chainhash.Hash]*chaintracks.BlockHeader{
+			hashMain:   mainHeader,
+			hashOrphan: orphanHeader,
+		},
+	}
+	cm.byHeight[5] = hashMain
+
+	assert.True(t, cm.isOnMainChain(t.Context(), mainHeader), "main chain block should return true")
+	assert.False(t, cm.isOnMainChain(t.Context(), orphanHeader), "orphan block should return false")
+}
+
+// TestReorgOrphanAtSameHeight reproduces the bug where a competing block at the
+// same height as the tip is stored as an orphan in byHash, then when the next
+// block arrives building on the orphan, the orphan's height in byHeight is never
+// updated because the common ancestor search finds the orphan and treats it as
+// the fork point (commonAncestor.Height == oldTip.Height, so reorg is skipped).
+//
+// The fix ensures that only main-chain blocks are treated as common ancestors
+// during sync, so orphan blocks at the same height as the tip trigger a proper
+// reorg back to the real common ancestor (the parent of both competing blocks).
+func TestReorgOrphanAtSameHeight(t *testing.T) {
+	ctx := t.Context()
+	tmpDir := t.TempDir()
+
+	cm, err := NewForTesting(ctx, "test", tmpDir)
+	require.NoError(t, err)
+
+	// Build a chain: genesis(0) → block1(1) → block2(2) → blockA(3)
+	// blockA is the first block at height 3 (becomes tip)
+	genesis := &chaintracks.BlockHeader{
+		Header:    &block.Header{Version: 1, Bits: 0x1d00ffff},
+		Height:    0,
+		Hash:      chainhash.Hash{0x10},
+		ChainWork: CalculateWork(0x1d00ffff),
+	}
+	block1 := &chaintracks.BlockHeader{
+		Header:    &block.Header{Version: 1, Bits: 0x1d00ffff, PrevHash: genesis.Hash},
+		Height:    1,
+		Hash:      chainhash.Hash{0x11},
+		ChainWork: new(big.Int).Mul(CalculateWork(0x1d00ffff), big.NewInt(2)),
+	}
+	block2 := &chaintracks.BlockHeader{
+		Header:    &block.Header{Version: 1, Bits: 0x1d00ffff, PrevHash: block1.Hash},
+		Height:    2,
+		Hash:      chainhash.Hash{0x12},
+		ChainWork: new(big.Int).Mul(CalculateWork(0x1d00ffff), big.NewInt(3)),
+	}
+	blockA := &chaintracks.BlockHeader{
+		Header:    &block.Header{Version: 1, Bits: 0x1d00ffff, PrevHash: block2.Hash},
+		Height:    3,
+		Hash:      chainhash.Hash{0xA0}, // Stale block
+		ChainWork: new(big.Int).Mul(CalculateWork(0x1d00ffff), big.NewInt(4)),
+	}
+
+	err = cm.SetChainTip(ctx, []*chaintracks.BlockHeader{genesis, block1, block2, blockA})
+	require.NoError(t, err)
+	assert.Equal(t, uint32(3), cm.GetHeight(ctx))
+	assert.Equal(t, blockA.Hash, cm.GetTip(ctx).Hash)
+
+	// Competing blockB at height 3 (same parent as blockA, same chainwork)
+	// Added to byHash as orphan — NOT in byHeight
+	blockB := &chaintracks.BlockHeader{
+		Header:    &block.Header{Version: 2, Bits: 0x1d00ffff, PrevHash: block2.Hash},
+		Height:    3,
+		Hash:      chainhash.Hash{0xB0}, // Canonical block
+		ChainWork: new(big.Int).Mul(CalculateWork(0x1d00ffff), big.NewInt(4)),
+	}
+	err = cm.AddHeader(blockB)
+	require.NoError(t, err)
+
+	// Verify blockB is an orphan (in byHash but not in byHeight)
+	assert.False(t, cm.isOnMainChain(ctx, blockB))
+	assert.True(t, cm.isOnMainChain(ctx, blockA))
+
+	// Now block4 arrives building on blockB (the orphan).
+	// This simulates what SyncFromRemoteTip does AFTER the fix:
+	// it finds the real common ancestor (block2 at height 2) and includes
+	// blockB in the branch, triggering a proper reorg.
+	block4 := &chaintracks.BlockHeader{
+		Header:    &block.Header{Version: 1, Bits: 0x1d00ffff, PrevHash: blockB.Hash},
+		Height:    4,
+		Hash:      chainhash.Hash{0x14},
+		ChainWork: new(big.Int).Mul(CalculateWork(0x1d00ffff), big.NewInt(5)),
+	}
+
+	// The branch includes blockB (replacing blockA at height 3) and block4
+	err = cm.SetChainTipWithReorg(ctx, []*chaintracks.BlockHeader{blockB, block4}, block2, []chainhash.Hash{blockA.Hash})
+	require.NoError(t, err)
+
+	// Verify: tip should be block4
+	assert.Equal(t, uint32(4), cm.GetHeight(ctx))
+	assert.Equal(t, block4.Hash, cm.GetTip(ctx).Hash)
+
+	// Critical check: byHeight[3] should now be blockB, NOT blockA
+	headerAt3, err := cm.GetHeaderByHeight(ctx, 3)
+	require.NoError(t, err)
+	assert.Equal(t, blockB.Hash, headerAt3.Hash, "byHeight[3] should be blockB (canonical), not blockA (stale)")
+
+	// Verify blockB is now on main chain
+	assert.True(t, cm.isOnMainChain(ctx, blockB))
+	assert.False(t, cm.isOnMainChain(ctx, blockA))
 }

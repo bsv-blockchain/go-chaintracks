@@ -26,10 +26,13 @@ const (
 //
 //nolint:gocyclo // Complex sync and ancestor finding logic
 func (cm *ChainManager) SyncFromRemoteTip(ctx context.Context, remoteTipHash chainhash.Hash, baseURL string) error {
-	// Check if we already have the remote tip
-	if _, err := cm.GetHeaderByHash(ctx, &remoteTipHash); err == nil {
-		log.Printf("Already have block %s", remoteTipHash.String())
-		return nil
+	// Check if we already have the remote tip on our main chain
+	if existingHeader, err := cm.GetHeaderByHash(ctx, &remoteTipHash); err == nil {
+		if cm.isOnMainChain(ctx, existingHeader) {
+			log.Printf("Already have block %s on main chain", remoteTipHash.String())
+			return nil
+		}
+		log.Printf("Have block %s but it's an orphan, continuing sync", remoteTipHash.String())
 	}
 
 	// Walk backwards from remote tip to find common ancestor
@@ -40,10 +43,9 @@ func (cm *ChainManager) SyncFromRemoteTip(ctx context.Context, remoteTipHash cha
 
 	startTime := time.Now()
 	for {
-		// Check if we have this block in our chain
+		// Check if we have this block on our main chain
 		existingHeader, err := cm.GetHeaderByHash(ctx, &currentHash)
-		if err == nil {
-			// Found common ancestor!
+		if err == nil && cm.isOnMainChain(ctx, existingHeader) {
 			commonAncestor = existingHeader
 			log.Printf("Found common ancestor at height %d after %v", commonAncestor.Height, time.Since(startTime))
 			break
@@ -66,12 +68,11 @@ func (cm *ChainManager) SyncFromRemoteTip(ctx context.Context, remoteTipHash cha
 		// Add headers to branch (they're in reverse order - newest first)
 		branch = append(branch, headers...)
 
-		// Check if any of the fetched headers exist in our chain
+		// Check if any of the fetched headers exist on our main chain
 		found := false
 		for i, header := range headers {
 			hash := header.Hash()
-			if existingHeader, err := cm.GetHeaderByHash(ctx, &hash); err == nil {
-				// Found common ancestor!
+			if existingHeader, err := cm.GetHeaderByHash(ctx, &hash); err == nil && cm.isOnMainChain(ctx, existingHeader) {
 				commonAncestor = existingHeader
 				// Trim the branch to only include headers after the common ancestor
 				branch = branch[:len(branch)-len(headers)+i]
