@@ -206,13 +206,12 @@ func (c *Client) reorgFanOut(ctx context.Context) {
 	}
 }
 
-// runSSE connects to the SSE stream and reads events.
-func (c *Client) runSSE(ctx context.Context) {
-	defer close(c.msgChan)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/v2/tip/stream", nil)
+// connectSSE establishes an SSE connection to the given path and returns the response body.
+// Returns nil if the connection fails.
+func (c *Client) connectSSE(ctx context.Context, path string) io.ReadCloser {
+	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+path, nil)
 	if err != nil {
-		return
+		return nil
 	}
 
 	req.Header.Set("Accept", "text/event-stream")
@@ -221,41 +220,39 @@ func (c *Client) runSSE(ctx context.Context) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return
+		return nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
+		return nil
+	}
+
+	return resp.Body
+}
+
+// runSSE connects to the SSE stream and reads events.
+func (c *Client) runSSE(ctx context.Context) {
+	defer close(c.msgChan)
+
+	body := c.connectSSE(ctx, "/v2/tip/stream")
+	if body == nil {
 		return
 	}
 
-	c.readSSE(ctx, resp.Body)
+	c.readSSE(ctx, body)
 }
 
 // runReorgSSE connects to the reorg SSE stream and reads events.
 func (c *Client) runReorgSSE(ctx context.Context) {
 	defer close(c.reorgMsgChan)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/v2/reorg/stream", nil)
-	if err != nil {
+	body := c.connectSSE(ctx, "/v2/reorg/stream")
+	if body == nil {
 		return
 	}
 
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Connection", "keep-alive")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		return
-	}
-
-	c.readReorgSSE(ctx, resp.Body)
+	c.readReorgSSE(ctx, body)
 }
 
 // readSSE reads Server-Sent Events from the response body.
@@ -416,27 +413,7 @@ func (c *Client) GetHeight(ctx context.Context) uint32 {
 
 // fetchTip fetches the current tip via REST.
 func (c *Client) fetchTip(ctx context.Context) (*chaintracks.BlockHeader, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/v2/tip", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch tip: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
-	}
-
-	var header chaintracks.BlockHeader
-	if err := json.NewDecoder(resp.Body).Decode(&header); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return &header, nil
+	return c.fetchHeader(ctx, c.baseURL+"/v2/tip")
 }
 
 // GetHeaderByHeight retrieves a header by height from the server.
