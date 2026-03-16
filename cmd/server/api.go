@@ -227,11 +227,11 @@ func (s *Server) HandleGetTip(c *fiber.Ctx) error {
 // parseHeight parses and validates a height string parameter, returning the parsed value.
 func parseHeight(heightStr string) (uint32, error) {
 	if heightStr == "" {
-		return 0, fmt.Errorf("missing height parameter")
+		return 0, fmt.Errorf("%w: height", chaintracks.ErrMissingParameter)
 	}
 	height, err := strconv.ParseUint(heightStr, 10, 32)
 	if err != nil {
-		return 0, fmt.Errorf("invalid height parameter")
+		return 0, fmt.Errorf("%w: height", chaintracks.ErrInvalidParameter)
 	}
 	return uint32(height), nil
 }
@@ -239,11 +239,11 @@ func parseHeight(heightStr string) (uint32, error) {
 // parseHash parses and validates a hash string parameter, returning the parsed value.
 func parseHash(hashStr string) (*chainhash.Hash, error) {
 	if hashStr == "" {
-		return nil, fmt.Errorf("missing hash parameter")
+		return nil, fmt.Errorf("%w: hash", chaintracks.ErrMissingParameter)
 	}
 	hash, err := chainhash.NewHashFromHex(hashStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid hash parameter")
+		return nil, fmt.Errorf("%w: hash", chaintracks.ErrInvalidParameter)
 	}
 	return hash, nil
 }
@@ -435,7 +435,7 @@ func (s *Server) HandleGetHeadersBinary(c *fiber.Ctx) error {
 	s.setCacheControl(c, height)
 
 	data := s.collectHeaders(c, height, count)
-	headerCount := uint32(len(data) / 80)
+	headerCount := uint32(len(data) / 80) //nolint:gosec // len(data)/80 is bounded by HTTP response size, cannot overflow uint32
 
 	c.Set("Content-Type", "application/octet-stream")
 	c.Set("X-Start-Height", strconv.FormatUint(uint64(height), 10))

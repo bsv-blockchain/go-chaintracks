@@ -69,4 +69,10 @@ var (
 
 	// ErrInvalidResponseLength is returned when response length is invalid
 	ErrInvalidResponseLength = errors.New("invalid response length")
+
+	// ErrMissingParameter is returned when a required parameter is missing
+	ErrMissingParameter = errors.New("missing parameter")
+
+	// ErrInvalidParameter is returned when a parameter value is invalid
+	ErrInvalidParameter = errors.New("invalid parameter")
 )

@@ -611,7 +611,7 @@ func (r *Routes) handleGetHeadersBinary(c *fiber.Ctx) error {
 	r.setCacheControl(c, height)
 
 	data := r.collectHeaders(c, height, count)
-	headerCount := uint32(len(data) / 80)
+	headerCount := uint32(len(data) / 80) //nolint:gosec // len(data)/80 is bounded by HTTP response size, cannot overflow uint32
 
 	c.Set("Content-Type", "application/octet-stream")
 	c.Set("X-Start-Height", strconv.FormatUint(uint64(height), 10))
