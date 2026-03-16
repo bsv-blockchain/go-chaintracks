@@ -253,7 +253,6 @@ func (s *Server) setCacheControl(c *fiber.Ctx, height uint32) {
 	}
 }
 
-
 // collectHeaders gathers sequential headers starting from the given height.
 func (s *Server) collectHeaders(c *fiber.Ctx, height, count uint32) []byte {
 	var data []byte

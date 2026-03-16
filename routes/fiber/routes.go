@@ -444,7 +444,6 @@ func (r *Routes) handleReorgStream(c *fiber.Ctx) error {
 	return nil
 }
 
-
 // setCacheControl sets Cache-Control header based on whether height is deep enough in the chain.
 func (r *Routes) setCacheControl(c *fiber.Ctx, height uint32) {
 	tip := r.cm.GetHeight(c.UserContext())
