@@ -229,7 +229,7 @@ func (r *Routes) handleLegacyFindHeaderHexForBlockHash(c *fiber.Ctx) error {
 
 // handleLegacyGetHeaders returns multiple headers as hex string in legacy format
 func (r *Routes) handleLegacyGetHeaders(c *fiber.Ctx) error {
-	height, count, err := parseHeightAndCount(c.Query("height"), c.Query("count"))
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", err.Error()))
 	}
@@ -444,21 +444,6 @@ func (r *Routes) handleReorgStream(c *fiber.Ctx) error {
 	return nil
 }
 
-// parseHeightAndCount parses height and count query parameters for multi-header endpoints.
-func parseHeightAndCount(heightStr, countStr string) (uint32, uint32, error) {
-	if heightStr == "" || countStr == "" {
-		return 0, 0, fmt.Errorf("Missing height or count parameter")
-	}
-	height, err := strconv.ParseUint(heightStr, 10, 32)
-	if err != nil {
-		return 0, 0, fmt.Errorf("Invalid height parameter")
-	}
-	count, err := strconv.ParseUint(countStr, 10, 32)
-	if err != nil {
-		return 0, 0, fmt.Errorf("Invalid count parameter")
-	}
-	return uint32(height), uint32(count), nil
-}
 
 // setCacheControl sets Cache-Control header based on whether height is deep enough in the chain.
 func (r *Routes) setCacheControl(c *fiber.Ctx, height uint32) {
@@ -546,7 +531,7 @@ func (r *Routes) handleGetHeaderByHash(c *fiber.Ctx) error {
 // @Failure 400 {object} ErrorResponse
 // @Router /chaintracks/headers [get]
 func (r *Routes) handleGetHeaders(c *fiber.Ctx) error {
-	height, count, err := parseHeightAndCount(c.Query("height"), c.Query("count"))
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -619,7 +604,7 @@ func (r *Routes) handleGetHeaderByHashBinary(c *fiber.Ctx) error {
 
 // handleGetHeadersBinary returns multiple headers as binary (80 bytes each)
 func (r *Routes) handleGetHeadersBinary(c *fiber.Ctx) error {
-	height, count, err := parseHeightAndCount(c.Query("height"), c.Query("count"))
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}

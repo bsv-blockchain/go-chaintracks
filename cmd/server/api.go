@@ -253,21 +253,6 @@ func (s *Server) setCacheControl(c *fiber.Ctx, height uint32) {
 	}
 }
 
-// parseHeightAndCount parses height and count query parameters for multi-header endpoints.
-func parseHeightAndCount(heightStr, countStr string) (uint32, uint32, error) {
-	if heightStr == "" || countStr == "" {
-		return 0, 0, fmt.Errorf("missing height or count parameter")
-	}
-	height, err := strconv.ParseUint(heightStr, 10, 32)
-	if err != nil {
-		return 0, 0, fmt.Errorf("invalid height parameter")
-	}
-	count, err := strconv.ParseUint(countStr, 10, 32)
-	if err != nil {
-		return 0, 0, fmt.Errorf("invalid count parameter")
-	}
-	return uint32(height), uint32(count), nil
-}
 
 // collectHeaders gathers sequential headers starting from the given height.
 func (s *Server) collectHeaders(c *fiber.Ctx, height, count uint32) []byte {
@@ -340,7 +325,7 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 
 // HandleGetHeaders returns multiple headers as concatenated hex
 func (s *Server) HandleGetHeaders(c *fiber.Ctx) error {
-	height, count, err := parseHeightAndCount(c.Query("height"), c.Query("count"))
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
 			Status:      "error",
@@ -434,7 +419,7 @@ func (s *Server) HandleGetHeaderByHashBinary(c *fiber.Ctx) error {
 // HandleGetHeadersBinary returns multiple headers as binary (80 bytes each)
 // X-Start-Height header contains the starting height, headers are sequential from there
 func (s *Server) HandleGetHeadersBinary(c *fiber.Ctx) error {
-	height, count, err := parseHeightAndCount(c.Query("height"), c.Query("count"))
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
 			Status:      "error",
@@ -616,7 +601,7 @@ func (s *Server) HandleLegacyFindHeaderHexForBlockHash(c *fiber.Ctx) error {
 
 // HandleLegacyGetHeaders returns multiple headers as hex string in legacy format
 func (s *Server) HandleLegacyGetHeaders(c *fiber.Ctx) error {
-	height, count, err := parseHeightAndCount(c.Query("height"), c.Query("count"))
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", err.Error()))
 	}

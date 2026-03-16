@@ -428,9 +428,8 @@ func (c *Client) GetHeaderByHash(ctx context.Context, hash *chainhash.Hash) (*ch
 	return c.fetchHeader(ctx, url)
 }
 
-// GetHeaders retrieves multiple headers starting from the given height.
-func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chaintracks.BlockHeader, error) {
-	url := fmt.Sprintf("%s/v2/headers?height=%d&count=%d", c.baseURL, height, count)
+// doGet performs an HTTP GET and returns the response body. Caller must close the body.
+func (c *Client) doGet(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -438,13 +437,25 @@ func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chain
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch headers: %w", err)
+		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
 	}
+
+	return resp, nil
+}
+
+// GetHeaders retrieves multiple headers starting from the given height.
+func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chaintracks.BlockHeader, error) {
+	url := fmt.Sprintf("%s/v2/headers?height=%d&count=%d", c.baseURL, height, count)
+	resp, err := c.doGet(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -474,20 +485,11 @@ func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chain
 
 // fetchHeader is a helper to fetch and parse a header from the server.
 func (c *Client) fetchHeader(ctx context.Context, url string) (*chaintracks.BlockHeader, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	resp, err := c.doGet(ctx, url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch header: %w", err)
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
-	}
 
 	var header chaintracks.BlockHeader
 	if err := json.NewDecoder(resp.Body).Decode(&header); err != nil {
