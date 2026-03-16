@@ -21,6 +21,11 @@ import (
 //go:embed openapi.yaml
 var openapiSpec string
 
+const (
+	errHeaderNotFoundAtHeight = "Header not found at height "
+	errHeaderNotFoundForHash  = "Header not found for hash "
+)
+
 // Server wraps the Chaintracks interface with Fiber handlers
 //
 //nolint:containedctx // Context stored for SSE stream shutdown detection
@@ -284,7 +289,7 @@ func (s *Server) HandleGetHeaderByHeight(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_NOT_FOUND",
-			Description: "Header not found at height " + strconv.FormatUint(uint64(height), 10),
+			Description: errHeaderNotFoundAtHeight + strconv.FormatUint(uint64(height), 10),
 		})
 	}
 
@@ -310,7 +315,7 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_NOT_FOUND",
-			Description: "Header not found for hash " + c.Params("hash"),
+			Description: errHeaderNotFoundForHash + c.Params("hash"),
 		})
 	}
 
@@ -378,7 +383,7 @@ func (s *Server) HandleGetHeaderByHeightBinary(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_NOT_FOUND",
-			Description: "Header not found at height " + heightStr,
+			Description: errHeaderNotFoundAtHeight + heightStr,
 		})
 	}
 
@@ -404,7 +409,7 @@ func (s *Server) HandleGetHeaderByHashBinary(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_NOT_FOUND",
-			Description: "Header not found for hash " + hashStr,
+			Description: errHeaderNotFoundForHash + hashStr,
 		})
 	}
 
@@ -576,7 +581,7 @@ func (s *Server) HandleLegacyFindHeaderHexForHeight(c *fiber.Ctx) error {
 
 	header, err := s.ct.GetHeaderByHeight(c.UserContext(), height)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", "Header not found at height "+strconv.FormatUint(uint64(height), 10)))
+		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", errHeaderNotFoundAtHeight+strconv.FormatUint(uint64(height), 10)))
 	}
 	return c.JSON(legacySuccess(header))
 }
@@ -590,7 +595,7 @@ func (s *Server) HandleLegacyFindHeaderHexForBlockHash(c *fiber.Ctx) error {
 
 	header, err := s.ct.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", "Header not found for hash "+c.Query("hash")))
+		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", errHeaderNotFoundForHash+c.Query("hash")))
 	}
 
 	s.setCacheControl(c, header.Height)
