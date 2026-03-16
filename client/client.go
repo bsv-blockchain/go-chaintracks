@@ -206,13 +206,12 @@ func (c *Client) reorgFanOut(ctx context.Context) {
 	}
 }
 
-// runSSE connects to the SSE stream and reads events.
-func (c *Client) runSSE(ctx context.Context) {
-	defer close(c.msgChan)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/v2/tip/stream", nil)
+// connectSSE establishes an SSE connection to the given path and returns the response body.
+// Returns nil if the connection fails.
+func (c *Client) connectSSE(ctx context.Context, path string) io.ReadCloser {
+	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+path, nil)
 	if err != nil {
-		return
+		return nil
 	}
 
 	req.Header.Set("Accept", "text/event-stream")
@@ -221,41 +220,39 @@ func (c *Client) runSSE(ctx context.Context) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return
+		return nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
+		return nil
+	}
+
+	return resp.Body
+}
+
+// runSSE connects to the SSE stream and reads events.
+func (c *Client) runSSE(ctx context.Context) {
+	defer close(c.msgChan)
+
+	body := c.connectSSE(ctx, "/v2/tip/stream")
+	if body == nil {
 		return
 	}
 
-	c.readSSE(ctx, resp.Body)
+	c.readSSE(ctx, body)
 }
 
 // runReorgSSE connects to the reorg SSE stream and reads events.
 func (c *Client) runReorgSSE(ctx context.Context) {
 	defer close(c.reorgMsgChan)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/v2/reorg/stream", nil)
-	if err != nil {
+	body := c.connectSSE(ctx, "/v2/reorg/stream")
+	if body == nil {
 		return
 	}
 
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Connection", "keep-alive")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		return
-	}
-
-	c.readReorgSSE(ctx, resp.Body)
+	c.readReorgSSE(ctx, body)
 }
 
 // readSSE reads Server-Sent Events from the response body.
@@ -416,27 +413,7 @@ func (c *Client) GetHeight(ctx context.Context) uint32 {
 
 // fetchTip fetches the current tip via REST.
 func (c *Client) fetchTip(ctx context.Context) (*chaintracks.BlockHeader, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/v2/tip", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch tip: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
-	}
-
-	var header chaintracks.BlockHeader
-	if err := json.NewDecoder(resp.Body).Decode(&header); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return &header, nil
+	return c.fetchHeader(ctx, c.baseURL+"/v2/tip")
 }
 
 // GetHeaderByHeight retrieves a header by height from the server.
@@ -451,9 +428,8 @@ func (c *Client) GetHeaderByHash(ctx context.Context, hash *chainhash.Hash) (*ch
 	return c.fetchHeader(ctx, url)
 }
 
-// GetHeaders retrieves multiple headers starting from the given height.
-func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chaintracks.BlockHeader, error) {
-	url := fmt.Sprintf("%s/v2/headers?height=%d&count=%d", c.baseURL, height, count)
+// doGet performs an HTTP GET and returns the response body. Caller must close the body.
+func (c *Client) doGet(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -461,13 +437,25 @@ func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chain
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch headers: %w", err)
+		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
 	}
+
+	return resp, nil
+}
+
+// GetHeaders retrieves multiple headers starting from the given height.
+func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chaintracks.BlockHeader, error) {
+	url := fmt.Sprintf("%s/v2/headers?height=%d&count=%d", c.baseURL, height, count)
+	resp, err := c.doGet(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -497,20 +485,11 @@ func (c *Client) GetHeaders(ctx context.Context, height, count uint32) ([]*chain
 
 // fetchHeader is a helper to fetch and parse a header from the server.
 func (c *Client) fetchHeader(ctx context.Context, url string) (*chaintracks.BlockHeader, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	resp, err := c.doGet(ctx, url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch header: %w", err)
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: status %d", chaintracks.ErrServerRequestFailed, resp.StatusCode)
-	}
 
 	var header chaintracks.BlockHeader
 	if err := json.NewDecoder(resp.Body).Decode(&header); err != nil {

@@ -21,6 +21,11 @@ import (
 //go:embed openapi.yaml
 var openapiSpec string
 
+const (
+	errHeaderNotFoundAtHeight = "Header not found at height "
+	errHeaderNotFoundForHash  = "Header not found for hash "
+)
+
 // Server wraps the Chaintracks interface with Fiber handlers
 //
 //nolint:containedctx // Context stored for SSE stream shutdown detection
@@ -219,39 +224,72 @@ func (s *Server) HandleGetTip(c *fiber.Ctx) error {
 	})
 }
 
-// HandleGetHeaderByHeight returns a header by height
-func (s *Server) HandleGetHeaderByHeight(c *fiber.Ctx) error {
-	heightStr := c.Params("height")
+// parseHeight parses and validates a height string parameter, returning the parsed value.
+func parseHeight(heightStr string) (uint32, error) {
 	if heightStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_INVALID_PARAMS",
-			Description: "Missing height parameter",
-		})
+		return 0, fmt.Errorf("%w: height", chaintracks.ErrMissingParameter)
 	}
-
 	height, err := strconv.ParseUint(heightStr, 10, 32)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_INVALID_PARAMS",
-			Description: "Invalid height parameter",
-		})
+		return 0, fmt.Errorf("%w: height", chaintracks.ErrInvalidParameter)
 	}
+	return uint32(height), nil
+}
 
+// parseHash parses and validates a hash string parameter, returning the parsed value.
+func parseHash(hashStr string) (*chainhash.Hash, error) {
+	if hashStr == "" {
+		return nil, fmt.Errorf("%w: hash", chaintracks.ErrMissingParameter)
+	}
+	hash, err := chainhash.NewHashFromHex(hashStr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: hash", chaintracks.ErrInvalidParameter)
+	}
+	return hash, nil
+}
+
+// setCacheControl sets Cache-Control header based on whether height is deep enough in the chain.
+func (s *Server) setCacheControl(c *fiber.Ctx, height uint32) {
 	tip := s.ct.GetHeight(c.UserContext())
-	if uint32(height) < tip-100 {
+	if height < tip-100 {
 		c.Set("Cache-Control", "public, max-age=3600")
 	} else {
 		c.Set("Cache-Control", "no-cache")
 	}
+}
 
-	header, err := s.ct.GetHeaderByHeight(c.UserContext(), uint32(height))
+// collectHeaders gathers sequential headers starting from the given height.
+func (s *Server) collectHeaders(c *fiber.Ctx, height, count uint32) []byte {
+	var data []byte
+	for i := uint32(0); i < count; i++ {
+		header, err := s.ct.GetHeaderByHeight(c.UserContext(), height+i)
+		if err != nil {
+			break
+		}
+		data = append(data, header.Bytes()...)
+	}
+	return data
+}
+
+// HandleGetHeaderByHeight returns a header by height
+func (s *Server) HandleGetHeaderByHeight(c *fiber.Ctx) error {
+	height, err := parseHeight(c.Params("height"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(Response{
+			Status:      "error",
+			Code:        "ERR_INVALID_PARAMS",
+			Description: err.Error(),
+		})
+	}
+
+	s.setCacheControl(c, height)
+
+	header, err := s.ct.GetHeaderByHeight(c.UserContext(), height)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_NOT_FOUND",
-			Description: "Header not found at height " + heightStr,
+			Description: errHeaderNotFoundAtHeight + strconv.FormatUint(uint64(height), 10),
 		})
 	}
 
@@ -263,21 +301,12 @@ func (s *Server) HandleGetHeaderByHeight(c *fiber.Ctx) error {
 
 // HandleGetHeaderByHash returns a header by hash
 func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
-	hashStr := c.Params("hash")
-	if hashStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_INVALID_PARAMS",
-			Description: "Missing hash parameter",
-		})
-	}
-
-	hash, err := chainhash.NewHashFromHex(hashStr)
+	hash, err := parseHash(c.Params("hash"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_INVALID_PARAMS",
-			Description: "Invalid hash parameter",
+			Description: err.Error(),
 		})
 	}
 
@@ -286,16 +315,11 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_NOT_FOUND",
-			Description: "Header not found for hash " + hashStr,
+			Description: errHeaderNotFoundForHash + c.Params("hash"),
 		})
 	}
 
-	tip := s.ct.GetHeight(c.UserContext())
-	if header.Height < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	s.setCacheControl(c, header.Height)
 
 	return c.JSON(Response{
 		Status: "success",
@@ -305,50 +329,18 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 
 // HandleGetHeaders returns multiple headers as concatenated hex
 func (s *Server) HandleGetHeaders(c *fiber.Ctx) error {
-	heightStr := c.Query("height")
-	countStr := c.Query("count")
-
-	if heightStr == "" || countStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_INVALID_PARAMS",
-			Description: "Missing height or count parameter",
-		})
-	}
-
-	height, err := strconv.ParseUint(heightStr, 10, 32)
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_INVALID_PARAMS",
-			Description: "Invalid height parameter",
+			Description: err.Error(),
 		})
 	}
 
-	count, err := strconv.ParseUint(countStr, 10, 32)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_INVALID_PARAMS",
-			Description: "Invalid count parameter",
-		})
-	}
+	s.setCacheControl(c, height)
 
-	tip := s.ct.GetHeight(c.UserContext())
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
-
-	var data []byte
-	for i := uint32(0); i < uint32(count); i++ {
-		header, err := s.ct.GetHeaderByHeight(c.UserContext(), uint32(height)+i)
-		if err != nil {
-			break
-		}
-		data = append(data, header.Bytes()...)
-	}
+	data := s.collectHeaders(c, height, count)
 
 	c.Set("Content-Type", "application/octet-stream")
 	return c.Send(data)
@@ -374,39 +366,24 @@ func (s *Server) HandleGetTipBinary(c *fiber.Ctx) error {
 
 // HandleGetHeaderByHeightBinary returns a header by height as 80-byte binary with height in X-Block-Height header
 func (s *Server) HandleGetHeaderByHeightBinary(c *fiber.Ctx) error {
-	heightStr := c.Params("height")
-	// Remove .bin suffix if present in the param
-	heightStr = strings.TrimSuffix(heightStr, ".bin")
-	if heightStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_INVALID_PARAMS",
-			Description: "Missing height parameter",
-		})
-	}
-
-	height, err := strconv.ParseUint(heightStr, 10, 32)
+	heightStr := strings.TrimSuffix(c.Params("height"), ".bin")
+	height, err := parseHeight(heightStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_INVALID_PARAMS",
-			Description: "Invalid height parameter",
+			Description: err.Error(),
 		})
 	}
 
-	tip := s.ct.GetHeight(c.UserContext())
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	s.setCacheControl(c, height)
 
-	header, err := s.ct.GetHeaderByHeight(c.UserContext(), uint32(height))
+	header, err := s.ct.GetHeaderByHeight(c.UserContext(), height)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_NOT_FOUND",
-			Description: "Header not found at height " + heightStr,
+			Description: errHeaderNotFoundAtHeight + heightStr,
 		})
 	}
 
@@ -417,23 +394,13 @@ func (s *Server) HandleGetHeaderByHeightBinary(c *fiber.Ctx) error {
 
 // HandleGetHeaderByHashBinary returns a header by hash as 80-byte binary with height in X-Block-Height header
 func (s *Server) HandleGetHeaderByHashBinary(c *fiber.Ctx) error {
-	hashStr := c.Params("hash")
-	// Remove .bin suffix if present in the param
-	hashStr = strings.TrimSuffix(hashStr, ".bin")
-	if hashStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_INVALID_PARAMS",
-			Description: "Missing hash parameter",
-		})
-	}
-
-	hash, err := chainhash.NewHashFromHex(hashStr)
+	hashStr := strings.TrimSuffix(c.Params("hash"), ".bin")
+	hash, err := parseHash(hashStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_INVALID_PARAMS",
-			Description: "Invalid hash parameter",
+			Description: err.Error(),
 		})
 	}
 
@@ -442,16 +409,11 @@ func (s *Server) HandleGetHeaderByHashBinary(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_NOT_FOUND",
-			Description: "Header not found for hash " + hashStr,
+			Description: errHeaderNotFoundForHash + hashStr,
 		})
 	}
 
-	tip := s.ct.GetHeight(c.UserContext())
-	if header.Height < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	s.setCacheControl(c, header.Height)
 
 	c.Set("Content-Type", "application/octet-stream")
 	c.Set("X-Block-Height", strconv.FormatUint(uint64(header.Height), 10))
@@ -461,55 +423,22 @@ func (s *Server) HandleGetHeaderByHashBinary(c *fiber.Ctx) error {
 // HandleGetHeadersBinary returns multiple headers as binary (80 bytes each)
 // X-Start-Height header contains the starting height, headers are sequential from there
 func (s *Server) HandleGetHeadersBinary(c *fiber.Ctx) error {
-	heightStr := c.Query("height")
-	countStr := c.Query("count")
-
-	if heightStr == "" || countStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_INVALID_PARAMS",
-			Description: "Missing height or count parameter",
-		})
-	}
-
-	height, err := strconv.ParseUint(heightStr, 10, 32)
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
 			Status:      "error",
 			Code:        "ERR_INVALID_PARAMS",
-			Description: "Invalid height parameter",
+			Description: err.Error(),
 		})
 	}
 
-	count, err := strconv.ParseUint(countStr, 10, 32)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
-			Code:        "ERR_INVALID_PARAMS",
-			Description: "Invalid count parameter",
-		})
-	}
+	s.setCacheControl(c, height)
 
-	tip := s.ct.GetHeight(c.UserContext())
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
-
-	var data []byte
-	var headerCount uint32
-	for i := uint32(0); i < uint32(count); i++ {
-		header, err := s.ct.GetHeaderByHeight(c.UserContext(), uint32(height)+i)
-		if err != nil {
-			break
-		}
-		data = append(data, header.Bytes()...)
-		headerCount++
-	}
+	data := s.collectHeaders(c, height, count)
+	headerCount := uint32(len(data) / 80) //nolint:gosec // len(data)/80 is bounded by HTTP response size, cannot overflow uint32
 
 	c.Set("Content-Type", "application/octet-stream")
-	c.Set("X-Start-Height", strconv.FormatUint(height, 10))
+	c.Set("X-Start-Height", strconv.FormatUint(uint64(height), 10))
 	c.Set("X-Header-Count", strconv.FormatUint(uint64(headerCount), 10))
 	return c.Send(data)
 }
@@ -643,92 +572,47 @@ func (s *Server) HandleLegacyFindChainTipHeaderHex(c *fiber.Ctx) error {
 
 // HandleLegacyFindHeaderHexForHeight returns a header by height using query param
 func (s *Server) HandleLegacyFindHeaderHexForHeight(c *fiber.Ctx) error {
-	heightStr := c.Query("height")
-	if heightStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Missing height parameter"))
-	}
-
-	height, err := strconv.ParseUint(heightStr, 10, 32)
+	height, err := parseHeight(c.Query("height"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid height parameter"))
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", err.Error()))
 	}
 
-	ctx := c.UserContext()
-	tip := s.ct.GetHeight(ctx)
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	s.setCacheControl(c, height)
 
-	header, err := s.ct.GetHeaderByHeight(ctx, uint32(height))
+	header, err := s.ct.GetHeaderByHeight(c.UserContext(), height)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", "Header not found at height "+heightStr))
+		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", errHeaderNotFoundAtHeight+strconv.FormatUint(uint64(height), 10)))
 	}
 	return c.JSON(legacySuccess(header))
 }
 
 // HandleLegacyFindHeaderHexForBlockHash returns a header by hash using query param
 func (s *Server) HandleLegacyFindHeaderHexForBlockHash(c *fiber.Ctx) error {
-	hashStr := c.Query("hash")
-	if hashStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Missing hash parameter"))
-	}
-
-	hash, err := chainhash.NewHashFromHex(hashStr)
+	hash, err := parseHash(c.Query("hash"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid hash parameter"))
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", err.Error()))
 	}
 
-	ctx := c.UserContext()
-	header, err := s.ct.GetHeaderByHash(ctx, hash)
+	header, err := s.ct.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", "Header not found for hash "+hashStr))
+		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", errHeaderNotFoundForHash+c.Query("hash")))
 	}
 
-	tip := s.ct.GetHeight(ctx)
-	if header.Height < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	s.setCacheControl(c, header.Height)
 
 	return c.JSON(legacySuccess(header))
 }
 
 // HandleLegacyGetHeaders returns multiple headers as hex string in legacy format
 func (s *Server) HandleLegacyGetHeaders(c *fiber.Ctx) error {
-	heightStr := c.Query("height")
-	countStr := c.Query("count")
-	if heightStr == "" || countStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Missing height or count parameter"))
-	}
-
-	height, err := strconv.ParseUint(heightStr, 10, 32)
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid height parameter"))
-	}
-	count, err := strconv.ParseUint(countStr, 10, 32)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid count parameter"))
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", err.Error()))
 	}
 
-	ctx := c.UserContext()
-	tip := s.ct.GetHeight(ctx)
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	s.setCacheControl(c, height)
 
-	var data []byte
-	for i := uint32(0); i < uint32(count); i++ {
-		header, err := s.ct.GetHeaderByHeight(ctx, uint32(height)+i)
-		if err != nil {
-			break
-		}
-		data = append(data, header.Bytes()...)
-	}
+	data := s.collectHeaders(c, height, count)
 
 	// Return as hex string wrapped in legacy response
 	return c.JSON(legacySuccess(fmt.Sprintf("%x", data)))

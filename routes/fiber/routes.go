@@ -196,15 +196,9 @@ func (r *Routes) handleLegacyFindHeaderHexForHeight(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid height parameter"))
 	}
 
-	ctx := c.UserContext()
-	tip := r.cm.GetHeight(ctx)
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	r.setCacheControl(c, uint32(height))
 
-	header, err := r.cm.GetHeaderByHeight(ctx, uint32(height))
+	header, err := r.cm.GetHeaderByHeight(c.UserContext(), uint32(height))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", "Header not found at height "+heightStr))
 	}
@@ -223,74 +217,47 @@ func (r *Routes) handleLegacyFindHeaderHexForBlockHash(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid hash parameter"))
 	}
 
-	ctx := c.UserContext()
-	header, err := r.cm.GetHeaderByHash(ctx, hash)
+	header, err := r.cm.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(legacyError("ERR_NOT_FOUND", "Header not found for hash "+hashStr))
 	}
 
-	tip := r.cm.GetHeight(ctx)
-	if header.Height < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	r.setCacheControl(c, header.Height)
 
 	return c.JSON(legacySuccess(header))
 }
 
 // handleLegacyGetHeaders returns multiple headers as hex string in legacy format
 func (r *Routes) handleLegacyGetHeaders(c *fiber.Ctx) error {
-	heightStr := c.Query("height")
-	countStr := c.Query("count")
-	if heightStr == "" || countStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Missing height or count parameter"))
-	}
-
-	height, err := strconv.ParseUint(heightStr, 10, 32)
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid height parameter"))
-	}
-	count, err := strconv.ParseUint(countStr, 10, 32)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", "Invalid count parameter"))
+		return c.Status(fiber.StatusBadRequest).JSON(legacyError("ERR_INVALID_PARAMS", err.Error()))
 	}
 
-	ctx := c.UserContext()
-	tip := r.cm.GetHeight(ctx)
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	r.setCacheControl(c, height)
 
-	var data []byte
-	for i := uint32(0); i < uint32(count); i++ {
-		header, err := r.cm.GetHeaderByHeight(ctx, uint32(height)+i)
-		if err != nil {
-			break
-		}
-		data = append(data, header.Bytes()...)
-	}
+	data := r.collectHeaders(c, height, count)
 
 	// Return as hex string wrapped in legacy response
 	return c.JSON(legacySuccess(fmt.Sprintf("%x", data)))
 }
 
-func (r *Routes) broadcastTip(tip *chaintracks.BlockHeader) {
-	data, err := json.Marshal(tip)
+// broadcastSSE marshals data and broadcasts to all SSE clients in the given map,
+// removing any clients that fail to receive the message.
+func broadcastSSE(data interface{}, mu *sync.RWMutex, clients map[int64]*bufio.Writer) {
+	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return
 	}
 
-	sseMessage := fmt.Sprintf("data: %s\n\n", string(data))
+	sseMessage := fmt.Sprintf("data: %s\n\n", string(jsonData))
 
-	r.sseClientsMu.RLock()
-	clientsCopy := make(map[int64]*bufio.Writer, len(r.sseClients))
-	for id, writer := range r.sseClients {
+	mu.RLock()
+	clientsCopy := make(map[int64]*bufio.Writer, len(clients))
+	for id, writer := range clients {
 		clientsCopy[id] = writer
 	}
-	r.sseClientsMu.RUnlock()
+	mu.RUnlock()
 
 	var failedClients []int64
 	for id, writer := range clientsCopy {
@@ -304,47 +271,20 @@ func (r *Routes) broadcastTip(tip *chaintracks.BlockHeader) {
 	}
 
 	if len(failedClients) > 0 {
-		r.sseClientsMu.Lock()
+		mu.Lock()
 		for _, id := range failedClients {
-			delete(r.sseClients, id)
+			delete(clients, id)
 		}
-		r.sseClientsMu.Unlock()
+		mu.Unlock()
 	}
 }
 
+func (r *Routes) broadcastTip(tip *chaintracks.BlockHeader) {
+	broadcastSSE(tip, &r.sseClientsMu, r.sseClients)
+}
+
 func (r *Routes) broadcastReorg(reorg *chaintracks.ReorgEvent) {
-	data, err := json.Marshal(reorg)
-	if err != nil {
-		return
-	}
-
-	sseMessage := fmt.Sprintf("data: %s\n\n", string(data))
-
-	r.reorgClientsMu.RLock()
-	clientsCopy := make(map[int64]*bufio.Writer, len(r.reorgClients))
-	for id, writer := range r.reorgClients {
-		clientsCopy[id] = writer
-	}
-	r.reorgClientsMu.RUnlock()
-
-	var failedClients []int64
-	for id, writer := range clientsCopy {
-		if _, err := fmt.Fprint(writer, sseMessage); err != nil {
-			failedClients = append(failedClients, id)
-			continue
-		}
-		if err := writer.Flush(); err != nil {
-			failedClients = append(failedClients, id)
-		}
-	}
-
-	if len(failedClients) > 0 {
-		r.reorgClientsMu.Lock()
-		for _, id := range failedClients {
-			delete(r.reorgClients, id)
-		}
-		r.reorgClientsMu.Unlock()
-	}
+	broadcastSSE(reorg, &r.reorgClientsMu, r.reorgClients)
 }
 
 // handleGetNetwork returns the network name
@@ -504,6 +444,30 @@ func (r *Routes) handleReorgStream(c *fiber.Ctx) error {
 	return nil
 }
 
+// setCacheControl sets Cache-Control header based on whether height is deep enough in the chain.
+func (r *Routes) setCacheControl(c *fiber.Ctx, height uint32) {
+	tip := r.cm.GetHeight(c.UserContext())
+	if height < tip-100 {
+		c.Set("Cache-Control", "public, max-age=3600")
+	} else {
+		c.Set("Cache-Control", "no-cache")
+	}
+}
+
+// collectHeaders gathers sequential headers starting from the given height.
+func (r *Routes) collectHeaders(c *fiber.Ctx, height, count uint32) []byte {
+	ctx := c.UserContext()
+	var data []byte
+	for i := uint32(0); i < count; i++ {
+		header, err := r.cm.GetHeaderByHeight(ctx, height+i)
+		if err != nil {
+			break
+		}
+		data = append(data, header.Bytes()...)
+	}
+	return data
+}
+
 // handleGetHeaderByHeight returns a block header by height
 // @Summary Get header by height
 // @Description Returns a block header at the specified height
@@ -520,15 +484,9 @@ func (r *Routes) handleGetHeaderByHeight(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid height parameter"})
 	}
 
-	ctx := c.UserContext()
-	tip := r.cm.GetHeight(ctx)
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	r.setCacheControl(c, uint32(height))
 
-	header, err := r.cm.GetHeaderByHeight(ctx, uint32(height))
+	header, err := r.cm.GetHeaderByHeight(c.UserContext(), uint32(height))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Header not found"})
 	}
@@ -551,18 +509,12 @@ func (r *Routes) handleGetHeaderByHash(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid hash parameter"})
 	}
 
-	ctx := c.UserContext()
-	header, err := r.cm.GetHeaderByHash(ctx, hash)
+	header, err := r.cm.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Header not found"})
 	}
 
-	tip := r.cm.GetHeight(ctx)
-	if header.Height < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	r.setCacheControl(c, header.Height)
 
 	return c.JSON(header)
 }
@@ -578,37 +530,14 @@ func (r *Routes) handleGetHeaderByHash(c *fiber.Ctx) error {
 // @Failure 400 {object} ErrorResponse
 // @Router /chaintracks/headers [get]
 func (r *Routes) handleGetHeaders(c *fiber.Ctx) error {
-	heightStr := c.Query("height")
-	countStr := c.Query("count")
-	if heightStr == "" || countStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing height or count parameter"})
-	}
-
-	height, err := strconv.ParseUint(heightStr, 10, 32)
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid height parameter"})
-	}
-	count, err := strconv.ParseUint(countStr, 10, 32)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid count parameter"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	ctx := c.UserContext()
-	tip := r.cm.GetHeight(ctx)
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	r.setCacheControl(c, height)
 
-	var data []byte
-	for i := uint32(0); i < uint32(count); i++ {
-		header, err := r.cm.GetHeaderByHeight(ctx, uint32(height)+i)
-		if err != nil {
-			break
-		}
-		data = append(data, header.Bytes()...)
-	}
+	data := r.collectHeaders(c, height, count)
 
 	c.Set("Content-Type", "application/octet-stream")
 	return c.Send(data)
@@ -632,23 +561,16 @@ func (r *Routes) handleGetTipBinary(c *fiber.Ctx) error {
 
 // handleGetHeaderByHeightBinary returns a header by height as 80-byte binary
 func (r *Routes) handleGetHeaderByHeightBinary(c *fiber.Ctx) error {
-	heightStr := c.Params("height")
-	heightStr = strings.TrimSuffix(heightStr, ".bin")
+	heightStr := strings.TrimSuffix(c.Params("height"), ".bin")
 
 	height, err := strconv.ParseUint(heightStr, 10, 32)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid height parameter"})
 	}
 
-	ctx := c.UserContext()
-	tip := r.cm.GetHeight(ctx)
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	r.setCacheControl(c, uint32(height))
 
-	header, err := r.cm.GetHeaderByHeight(ctx, uint32(height))
+	header, err := r.cm.GetHeaderByHeight(c.UserContext(), uint32(height))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Header not found"})
 	}
@@ -660,26 +582,19 @@ func (r *Routes) handleGetHeaderByHeightBinary(c *fiber.Ctx) error {
 
 // handleGetHeaderByHashBinary returns a header by hash as 80-byte binary
 func (r *Routes) handleGetHeaderByHashBinary(c *fiber.Ctx) error {
-	hashStr := c.Params("hash")
-	hashStr = strings.TrimSuffix(hashStr, ".bin")
+	hashStr := strings.TrimSuffix(c.Params("hash"), ".bin")
 
 	hash, err := chainhash.NewHashFromHex(hashStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid hash parameter"})
 	}
 
-	ctx := c.UserContext()
-	header, err := r.cm.GetHeaderByHash(ctx, hash)
+	header, err := r.cm.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Header not found"})
 	}
 
-	tip := r.cm.GetHeight(ctx)
-	if header.Height < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	r.setCacheControl(c, header.Height)
 
 	c.Set("Content-Type", "application/octet-stream")
 	c.Set("X-Block-Height", strconv.FormatUint(uint64(header.Height), 10))
@@ -688,42 +603,18 @@ func (r *Routes) handleGetHeaderByHashBinary(c *fiber.Ctx) error {
 
 // handleGetHeadersBinary returns multiple headers as binary (80 bytes each)
 func (r *Routes) handleGetHeadersBinary(c *fiber.Ctx) error {
-	heightStr := c.Query("height")
-	countStr := c.Query("count")
-	if heightStr == "" || countStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing height or count parameter"})
-	}
-
-	height, err := strconv.ParseUint(heightStr, 10, 32)
+	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid height parameter"})
-	}
-	count, err := strconv.ParseUint(countStr, 10, 32)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid count parameter"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	ctx := c.UserContext()
-	tip := r.cm.GetHeight(ctx)
-	if uint32(height) < tip-100 {
-		c.Set("Cache-Control", "public, max-age=3600")
-	} else {
-		c.Set("Cache-Control", "no-cache")
-	}
+	r.setCacheControl(c, height)
 
-	var data []byte
-	var headerCount uint32
-	for i := uint32(0); i < uint32(count); i++ {
-		header, err := r.cm.GetHeaderByHeight(ctx, uint32(height)+i)
-		if err != nil {
-			break
-		}
-		data = append(data, header.Bytes()...)
-		headerCount++
-	}
+	data := r.collectHeaders(c, height, count)
+	headerCount := uint32(len(data) / 80) //nolint:gosec // len(data)/80 is bounded by HTTP response size, cannot overflow uint32
 
 	c.Set("Content-Type", "application/octet-stream")
-	c.Set("X-Start-Height", strconv.FormatUint(height, 10))
+	c.Set("X-Start-Height", strconv.FormatUint(uint64(height), 10))
 	c.Set("X-Header-Count", strconv.FormatUint(uint64(headerCount), 10))
 	return c.Send(data)
 }
