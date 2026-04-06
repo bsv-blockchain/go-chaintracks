@@ -6,7 +6,7 @@ require (
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.14
 	github.com/bsv-blockchain/go-sdk v1.2.20
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.1.1
-	github.com/bsv-blockchain/teranode v0.14.1-beta-3
+	github.com/bsv-blockchain/teranode v0.14.1-beta-8
 	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
 	github.com/spf13/viper v1.21.0
@@ -23,7 +23,6 @@ replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.4.1
 replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.42.0 // CVE-2026-24051: Path Hijacking fix
 
 require (
-	github.com/IBM/sarama v1.47.0 // indirect
 	github.com/aerospike/aerospike-client-go/v8 v8.6.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.5 // indirect
@@ -64,8 +63,6 @@ require (
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dolthub/swiss v0.2.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/eapache/go-resiliency v1.7.0 // indirect
-	github.com/eapache/queue v1.1.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/filecoin-project/go-clock v0.1.0 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
@@ -98,7 +95,6 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.1.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
-	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
@@ -109,11 +105,6 @@ require (
 	github.com/ipld/go-ipld-prime v0.22.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
-	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
-	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
-	github.com/jcmturner/gofork v1.7.6 // indirect
-	github.com/jcmturner/gokrb5/v8 v8.4.4 // indirect
-	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jellydator/ttlcache/v3 v3.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
@@ -192,7 +183,6 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect; pinned: v0.59.0+ incompatible with go-libp2p v0.46.0
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
-	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/zerolog v1.35.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
@@ -280,4 +270,7 @@ require (
 	github.com/seiflotfy/cuckoofilter v0.0.0-20240715131351-a2f2c23f1771 // indirect
 	github.com/testcontainers/testcontainers-go v0.41.0 // indirect
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.41.0 // indirect
+	github.com/twmb/franz-go v1.20.6 // indirect
+	github.com/twmb/franz-go/pkg/kadm v1.17.2 // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.12.0 // indirect
 )
