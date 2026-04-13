@@ -11,7 +11,7 @@ require (
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
-	github.com/valyala/fasthttp v1.69.0
+	github.com/valyala/fasthttp v1.70.0
 )
 
 replace github.com/bsv-blockchain/go-teranode-p2p-client => github.com/shruggr/go-teranode-p2p-client v0.0.0-20251219052644-3b9eba1f195f
