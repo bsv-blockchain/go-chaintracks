@@ -20,8 +20,6 @@ replace github.com/joho/godotenv => github.com/joho/godotenv v1.5.1
 
 replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.4.1
 
-replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.42.0 // CVE-2026-24051: Path Hijacking fix
-
 require (
 	github.com/aerospike/aerospike-client-go/v8 v8.6.0 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
