@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.15
 	github.com/bsv-blockchain/go-sdk v1.2.21
-	github.com/bsv-blockchain/go-teranode-p2p-client v0.1.1
+	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.1
 	github.com/bsv-blockchain/teranode v0.14.3-beta-5
 	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
@@ -14,13 +14,9 @@ require (
 	github.com/valyala/fasthttp v1.70.0
 )
 
-replace github.com/bsv-blockchain/go-teranode-p2p-client => github.com/shruggr/go-teranode-p2p-client v0.0.0-20251219052644-3b9eba1f195f
-
 replace github.com/joho/godotenv => github.com/joho/godotenv v1.5.1
 
-replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.4.1
-
-replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.42.0 // CVE-2026-24051: Path Hijacking fix
+replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.4.2
 
 require (
 	github.com/aerospike/aerospike-client-go/v8 v8.7.0 // indirect
@@ -221,7 +217,7 @@ require (
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260414141209-fac6e1c83189 // indirect
+	golang.org/x/telemetry v0.0.0-20260421165255-392afab6f40e // indirect
 	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
