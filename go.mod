@@ -3,7 +3,7 @@ module github.com/bsv-blockchain/go-chaintracks
 go 1.26.0
 
 require (
-	github.com/bsv-blockchain/go-p2p-message-bus v0.1.15
+	github.com/bsv-blockchain/go-p2p-message-bus v0.1.16
 	github.com/bsv-blockchain/go-sdk v1.2.21
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.1
 	github.com/bsv-blockchain/teranode v0.14.3-beta-5
