@@ -3,10 +3,10 @@ module github.com/bsv-blockchain/go-chaintracks
 go 1.26.0
 
 require (
-	github.com/bsv-blockchain/go-p2p-message-bus v0.1.15
-	github.com/bsv-blockchain/go-sdk v1.2.21
+	github.com/bsv-blockchain/go-p2p-message-bus v0.1.16
+	github.com/bsv-blockchain/go-sdk v1.2.22
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.1
-	github.com/bsv-blockchain/teranode v0.14.3-beta-5
+	github.com/bsv-blockchain/teranode v0.14.3-beta-6
 	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
 	github.com/spf13/viper v1.21.0
@@ -269,8 +269,8 @@ require (
 	github.com/seiflotfy/cuckoofilter v0.0.0-20240715131351-a2f2c23f1771 // indirect
 	github.com/testcontainers/testcontainers-go v0.42.0 // indirect
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0 // indirect
-	github.com/twmb/franz-go v1.20.7 // indirect
-	github.com/twmb/franz-go/pkg/kadm v1.17.2 // indirect
+	github.com/twmb/franz-go v1.21.0 // indirect
+	github.com/twmb/franz-go/pkg/kadm v1.18.0 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
 )
