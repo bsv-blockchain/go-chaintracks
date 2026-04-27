@@ -7,7 +7,7 @@ require (
 	github.com/bsv-blockchain/go-sdk v1.2.22
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.1
 	github.com/bsv-blockchain/teranode v0.14.3-beta-6
-	github.com/gofiber/fiber/v2 v2.52.12
+	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
