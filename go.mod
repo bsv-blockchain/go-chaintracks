@@ -3,7 +3,7 @@ module github.com/bsv-blockchain/go-chaintracks
 go 1.26.0
 
 require (
-	github.com/bsv-blockchain/go-p2p-message-bus v0.1.16
+	github.com/bsv-blockchain/go-p2p-message-bus v0.1.17
 	github.com/bsv-blockchain/go-sdk v1.2.22
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.1
 	github.com/bsv-blockchain/teranode v0.14.3-beta-6
@@ -97,7 +97,7 @@ require (
 	github.com/ipfs/go-cid v0.6.1 // indirect
 	github.com/ipfs/go-datastore v0.9.1 // indirect
 	github.com/ipfs/go-log/v2 v2.9.1 // indirect
-	github.com/ipld/go-ipld-prime v0.22.0 // indirect
+	github.com/ipld/go-ipld-prime v0.23.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/jellydator/ttlcache/v3 v3.4.0 // indirect
