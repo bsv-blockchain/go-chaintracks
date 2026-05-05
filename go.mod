@@ -6,7 +6,7 @@ require (
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.18
 	github.com/bsv-blockchain/go-sdk v1.2.23
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.5
-	github.com/bsv-blockchain/teranode v0.15.0-beta-3
+	github.com/bsv-blockchain/teranode v0.15.0-beta-5
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
 	github.com/spf13/viper v1.21.0
@@ -41,7 +41,6 @@ require (
 	github.com/aws/smithy-go v1.25.1 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bsv-blockchain/go-batcher v1.2.11 // indirect
 	github.com/bsv-blockchain/go-bt/v2 v2.6.3 // indirect
 	github.com/bsv-blockchain/go-chaincfg v1.5.7 // indirect
 	github.com/bsv-blockchain/go-lockfree-queue v1.1.3 // indirect
@@ -250,6 +249,7 @@ require (
 	filippo.io/keygen v0.0.0-20260114151900-8e2790ea4c5b // indirect
 	github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.1.20 // indirect
+	github.com/bsv-blockchain/go-batcher/v2 v2.0.0 // indirect
 	github.com/dgraph-io/badger/v4 v4.9.1 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.4.0 // indirect
 	github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 // indirect
