@@ -18,6 +18,11 @@ import (
 	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
+const (
+	statusError   = "error"
+	statusSuccess = "success"
+)
+
 // NetworkResponse represents the response for the network endpoint
 type NetworkResponse struct {
 	Network string `json:"network" example:"mainnet"`
@@ -130,11 +135,11 @@ type LegacyResponse struct {
 }
 
 func legacySuccess(value interface{}) LegacyResponse {
-	return LegacyResponse{Status: "success", Value: value}
+	return LegacyResponse{Status: statusSuccess, Value: value}
 }
 
 func legacyError(code, description string) LegacyResponse {
-	return LegacyResponse{Status: "error", Code: code, Description: description}
+	return LegacyResponse{Status: statusError, Code: code, Description: description}
 }
 
 // RegisterLegacy registers v1-compatible routes (RPC-style endpoints)
@@ -298,7 +303,7 @@ func (r *Routes) broadcastReorg(reorg *chaintracks.ReorgEvent) {
 func (r *Routes) handleGetNetwork(c *fiber.Ctx) error {
 	network, err := r.cm.GetNetwork(c.UserContext())
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{statusError: err.Error()})
 	}
 	return c.JSON(fiber.Map{"network": network})
 }
@@ -327,7 +332,7 @@ func (r *Routes) handleGetTip(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	tip := r.cm.GetTip(c.UserContext())
 	if tip == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chain tip not found"})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{statusError: "Chain tip not found"})
 	}
 	c.Set("X-Block-Height", strconv.FormatUint(uint64(tip.Height), 10))
 	return c.JSON(tip)
@@ -481,14 +486,14 @@ func (r *Routes) collectHeaders(c *fiber.Ctx, height, count uint32) []byte {
 func (r *Routes) handleGetHeaderByHeight(c *fiber.Ctx) error {
 	height, err := strconv.ParseUint(c.Params("height"), 10, 32)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid height parameter"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{statusError: "Invalid height parameter"})
 	}
 
 	r.setCacheControl(c, uint32(height))
 
 	header, err := r.cm.GetHeaderByHeight(c.UserContext(), uint32(height))
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Header not found"})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{statusError: "Header not found"})
 	}
 	return c.JSON(header)
 }
@@ -506,12 +511,12 @@ func (r *Routes) handleGetHeaderByHeight(c *fiber.Ctx) error {
 func (r *Routes) handleGetHeaderByHash(c *fiber.Ctx) error {
 	hash, err := chainhash.NewHashFromHex(c.Params("hash"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid hash parameter"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{statusError: "Invalid hash parameter"})
 	}
 
 	header, err := r.cm.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Header not found"})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{statusError: "Header not found"})
 	}
 
 	r.setCacheControl(c, header.Height)
@@ -532,7 +537,7 @@ func (r *Routes) handleGetHeaderByHash(c *fiber.Ctx) error {
 func (r *Routes) handleGetHeaders(c *fiber.Ctx) error {
 	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{statusError: err.Error()})
 	}
 
 	r.setCacheControl(c, height)
@@ -552,7 +557,7 @@ func (r *Routes) handleGetTipBinary(c *fiber.Ctx) error {
 
 	tip := r.cm.GetTip(c.UserContext())
 	if tip == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chain tip not found"})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{statusError: "Chain tip not found"})
 	}
 
 	c.Set("X-Block-Height", strconv.FormatUint(uint64(tip.Height), 10))
@@ -565,14 +570,14 @@ func (r *Routes) handleGetHeaderByHeightBinary(c *fiber.Ctx) error {
 
 	height, err := strconv.ParseUint(heightStr, 10, 32)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid height parameter"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{statusError: "Invalid height parameter"})
 	}
 
 	r.setCacheControl(c, uint32(height))
 
 	header, err := r.cm.GetHeaderByHeight(c.UserContext(), uint32(height))
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Header not found"})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{statusError: "Header not found"})
 	}
 
 	c.Set("Content-Type", "application/octet-stream")
@@ -586,12 +591,12 @@ func (r *Routes) handleGetHeaderByHashBinary(c *fiber.Ctx) error {
 
 	hash, err := chainhash.NewHashFromHex(hashStr)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid hash parameter"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{statusError: "Invalid hash parameter"})
 	}
 
 	header, err := r.cm.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Header not found"})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{statusError: "Header not found"})
 	}
 
 	r.setCacheControl(c, header.Height)
@@ -605,7 +610,7 @@ func (r *Routes) handleGetHeaderByHashBinary(c *fiber.Ctx) error {
 func (r *Routes) handleGetHeadersBinary(c *fiber.Ctx) error {
 	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{statusError: err.Error()})
 	}
 
 	r.setCacheControl(c, height)

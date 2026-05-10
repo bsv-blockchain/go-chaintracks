@@ -37,7 +37,7 @@ func TestParseMetadata(t *testing.T) {
 					HeadersPerFile: 10000,
 					Files: []chaintracks.CDNFileEntry{
 						{
-							Chain:         "main",
+							Chain:         networkMain,
 							Count:         100,
 							FileHash:      "abc123",
 							FileName:      "00000000-00000099.headers",
@@ -63,7 +63,7 @@ func TestParseMetadata(t *testing.T) {
 				assert.Equal(t, "mainNetBlockHeaders.json", metadata.JSONFilename)
 				assert.Equal(t, 10000, metadata.HeadersPerFile)
 				assert.Len(t, metadata.Files, 1)
-				assert.Equal(t, "main", metadata.Files[0].Chain)
+				assert.Equal(t, networkMain, metadata.Files[0].Chain)
 				assert.Equal(t, 100, metadata.Files[0].Count)
 				assert.Equal(t, uint32(0), metadata.Files[0].FirstHeight)
 			},
@@ -217,7 +217,7 @@ func TestLoadFromLocalFiles(t *testing.T) {
 	ctx := t.Context()
 
 	// Use NewForTesting - this test only verifies file loading, not P2P
-	cm, err := NewForTesting(ctx, "main", testCDNPath)
+	cm, err := NewForTesting(ctx, networkMain, testCDNPath)
 	if err != nil {
 		t.Fatalf("Failed to create ChainManager: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestChainManagerWriteLocalMetadata(t *testing.T) {
 				tmpDir := t.TempDir()
 				return &ChainManager{
 					localStoragePath: tmpDir,
-					network:          "main",
+					network:          networkMain,
 				}
 			},
 			metadata: &chaintracks.CDNMetadata{
@@ -261,7 +261,7 @@ func TestChainManagerWriteLocalMetadata(t *testing.T) {
 				HeadersPerFile: 10000,
 				Files: []chaintracks.CDNFileEntry{
 					{
-						Chain:         "main",
+						Chain:         networkMain,
 						Count:         100,
 						FileHash:      "abc123",
 						FileName:      "00000000-00000099.headers",
@@ -299,7 +299,7 @@ func TestChainManagerWriteLocalMetadata(t *testing.T) {
 				t.Helper()
 				return &ChainManager{
 					localStoragePath: "",
-					network:          "main",
+					network:          networkMain,
 				}
 			},
 			metadata: &chaintracks.CDNMetadata{
@@ -346,7 +346,7 @@ func TestChainManagerWriteLocalMetadata(t *testing.T) {
 				tmpDir := t.TempDir()
 				return &ChainManager{
 					localStoragePath: tmpDir,
-					network:          "main",
+					network:          networkMain,
 				}
 			},
 			metadata: &chaintracks.CDNMetadata{

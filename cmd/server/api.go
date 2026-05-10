@@ -24,6 +24,9 @@ var openapiSpec string
 const (
 	errHeaderNotFoundAtHeight = "Header not found at height "
 	errHeaderNotFoundForHash  = "Header not found for hash "
+
+	statusError   = "error"
+	statusSuccess = "success"
 )
 
 // Server wraps the Chaintracks interface with Fiber handlers
@@ -179,7 +182,7 @@ type Response struct {
 // HandleRoot returns service identification
 func (s *Server) HandleRoot(c *fiber.Ctx) error {
 	return c.JSON(Response{
-		Status: "success",
+		Status: statusSuccess,
 		Value:  "chaintracks-server",
 	})
 }
@@ -195,12 +198,12 @@ func (s *Server) HandleGetNetwork(c *fiber.Ctx) error {
 	network, err := s.ct.GetNetwork(c.UserContext())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(Response{
-			Status: "error",
+			Status: statusError,
 			Value:  err.Error(),
 		})
 	}
 	return c.JSON(Response{
-		Status: "success",
+		Status: statusSuccess,
 		Value:  network,
 	})
 }
@@ -212,14 +215,14 @@ func (s *Server) HandleGetTip(c *fiber.Ctx) error {
 	tip := s.ct.GetTip(c.UserContext())
 	if tip == nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_NO_TIP",
 			Description: "Chain tip not found",
 		})
 	}
 
 	return c.JSON(Response{
-		Status: "success",
+		Status: statusSuccess,
 		Value:  tip,
 	})
 }
@@ -276,7 +279,7 @@ func (s *Server) HandleGetHeaderByHeight(c *fiber.Ctx) error {
 	height, err := parseHeight(c.Params("height"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_INVALID_PARAMS",
 			Description: err.Error(),
 		})
@@ -287,14 +290,14 @@ func (s *Server) HandleGetHeaderByHeight(c *fiber.Ctx) error {
 	header, err := s.ct.GetHeaderByHeight(c.UserContext(), height)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_NOT_FOUND",
 			Description: errHeaderNotFoundAtHeight + strconv.FormatUint(uint64(height), 10),
 		})
 	}
 
 	return c.JSON(Response{
-		Status: "success",
+		Status: statusSuccess,
 		Value:  header,
 	})
 }
@@ -304,7 +307,7 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 	hash, err := parseHash(c.Params("hash"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_INVALID_PARAMS",
 			Description: err.Error(),
 		})
@@ -313,7 +316,7 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 	header, err := s.ct.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_NOT_FOUND",
 			Description: errHeaderNotFoundForHash + c.Params("hash"),
 		})
@@ -322,7 +325,7 @@ func (s *Server) HandleGetHeaderByHash(c *fiber.Ctx) error {
 	s.setCacheControl(c, header.Height)
 
 	return c.JSON(Response{
-		Status: "success",
+		Status: statusSuccess,
 		Value:  header,
 	})
 }
@@ -332,7 +335,7 @@ func (s *Server) HandleGetHeaders(c *fiber.Ctx) error {
 	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_INVALID_PARAMS",
 			Description: err.Error(),
 		})
@@ -354,7 +357,7 @@ func (s *Server) HandleGetTipBinary(c *fiber.Ctx) error {
 	tip := s.ct.GetTip(c.UserContext())
 	if tip == nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_NO_TIP",
 			Description: "Chain tip not found",
 		})
@@ -370,7 +373,7 @@ func (s *Server) HandleGetHeaderByHeightBinary(c *fiber.Ctx) error {
 	height, err := parseHeight(heightStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_INVALID_PARAMS",
 			Description: err.Error(),
 		})
@@ -381,7 +384,7 @@ func (s *Server) HandleGetHeaderByHeightBinary(c *fiber.Ctx) error {
 	header, err := s.ct.GetHeaderByHeight(c.UserContext(), height)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_NOT_FOUND",
 			Description: errHeaderNotFoundAtHeight + heightStr,
 		})
@@ -398,7 +401,7 @@ func (s *Server) HandleGetHeaderByHashBinary(c *fiber.Ctx) error {
 	hash, err := parseHash(hashStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_INVALID_PARAMS",
 			Description: err.Error(),
 		})
@@ -407,7 +410,7 @@ func (s *Server) HandleGetHeaderByHashBinary(c *fiber.Ctx) error {
 	header, err := s.ct.GetHeaderByHash(c.UserContext(), hash)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_NOT_FOUND",
 			Description: errHeaderNotFoundForHash + hashStr,
 		})
@@ -426,7 +429,7 @@ func (s *Server) HandleGetHeadersBinary(c *fiber.Ctx) error {
 	height, count, err := chaintracks.ParseHeightAndCount(c.Query("height"), c.Query("count"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(Response{
-			Status:      "error",
+			Status:      statusError,
 			Code:        "ERR_INVALID_PARAMS",
 			Description: err.Error(),
 		})
@@ -517,11 +520,11 @@ type LegacyResponse struct {
 }
 
 func legacySuccess(value interface{}) LegacyResponse {
-	return LegacyResponse{Status: "success", Value: value}
+	return LegacyResponse{Status: statusSuccess, Value: value}
 }
 
 func legacyError(code, description string) LegacyResponse {
-	return LegacyResponse{Status: "error", Code: code, Description: description}
+	return LegacyResponse{Status: statusError, Code: code, Description: description}
 }
 
 // SetupLegacyRoutes configures v1-compatible routes (RPC-style endpoints)

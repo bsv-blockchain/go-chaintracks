@@ -36,7 +36,7 @@ func TestNewCDNBootstrapper(t *testing.T) {
 		{
 			name:    "CreatesBootstrapperWithMainnet",
 			baseURL: "https://example.com",
-			network: "main",
+			network: networkMain,
 		},
 		{
 			name:    "CreatesBootstrapperWithTestnet",
@@ -64,7 +64,7 @@ func TestCDNBootstrapperFetchMetadata(t *testing.T) {
 		HeadersPerFile: 100000,
 		Files: []chaintracks.CDNFileEntry{
 			{
-				Chain:       "main",
+				Chain:       networkMain,
 				Count:       100000,
 				FileHash:    "abc123",
 				FileName:    "mainNet_0.headers",
@@ -82,7 +82,7 @@ func TestCDNBootstrapperFetchMetadata(t *testing.T) {
 	}{
 		{
 			name:    "FetchesMetadataSuccessfully",
-			network: "main",
+			network: networkMain,
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					assert.Equal(t, "/mainNetBlockHeaders.json", r.URL.Path)
@@ -108,7 +108,7 @@ func TestCDNBootstrapperFetchMetadata(t *testing.T) {
 		},
 		{
 			name:    "ReturnsErrorOnNotFound",
-			network: "main",
+			network: networkMain,
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusNotFound)
@@ -119,7 +119,7 @@ func TestCDNBootstrapperFetchMetadata(t *testing.T) {
 		},
 		{
 			name:    "ReturnsErrorOnInvalidJSON",
-			network: "main",
+			network: networkMain,
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
@@ -131,7 +131,7 @@ func TestCDNBootstrapperFetchMetadata(t *testing.T) {
 		},
 		{
 			name:    "ReturnsErrorOnServerError",
-			network: "main",
+			network: networkMain,
 			setupServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -243,7 +243,7 @@ func TestCDNBootstrapperFetchHeadersFile(t *testing.T) {
 			server := tt.setupServer()
 			defer server.Close()
 
-			b := NewCDNBootstrapper(server.URL, "main")
+			b := NewCDNBootstrapper(server.URL, networkMain)
 			data, err := b.FetchHeadersFile(context.Background(), tt.fileName)
 
 			if tt.expectedError {
@@ -362,7 +362,7 @@ func TestCDNBootstrapperConvertToBlockHeaders(t *testing.T) {
 			}
 
 			cm := tt.setupCM()
-			b := NewCDNBootstrapper("https://example.com", "main")
+			b := NewCDNBootstrapper("https://example.com", networkMain)
 
 			blockHeaders, err := b.convertToBlockHeaders(context.Background(), cm, inputHeaders, tt.firstHeight)
 
@@ -392,7 +392,7 @@ func TestCDNBootstrapperBootstrapIntegration(t *testing.T) {
 		HeadersPerFile: 100000,
 		Files: []chaintracks.CDNFileEntry{
 			{
-				Chain:       "main",
+				Chain:       networkMain,
 				Count:       1,
 				FileHash:    "abc123",
 				FileName:    "mainNet_0.headers",
@@ -460,11 +460,11 @@ func TestCDNBootstrapperBootstrapIntegration(t *testing.T) {
 			cm := &ChainManager{
 				byHeight:         make([]chainhash.Hash, 0),
 				byHash:           make(map[chainhash.Hash]*chaintracks.BlockHeader),
-				network:          "main",
+				network:          networkMain,
 				localStoragePath: t.TempDir(),
 			}
 
-			b := NewCDNBootstrapper(server.URL, "main")
+			b := NewCDNBootstrapper(server.URL, networkMain)
 			err := b.Bootstrap(context.Background(), cm)
 
 			if tt.expectedError {
@@ -489,14 +489,14 @@ func TestCDNBootstrapperContextCancellation(t *testing.T) {
 		HeadersPerFile: 100000,
 		Files: []chaintracks.CDNFileEntry{
 			{
-				Chain:       "main",
+				Chain:       networkMain,
 				Count:       1,
 				FileHash:    "abc123",
 				FileName:    "mainNet_0.headers",
 				FirstHeight: 0,
 			},
 			{
-				Chain:       "main",
+				Chain:       networkMain,
 				Count:       1,
 				FileHash:    "def456",
 				FileName:    "mainNet_1.headers",
@@ -521,7 +521,7 @@ func TestCDNBootstrapperContextCancellation(t *testing.T) {
 	cm := &ChainManager{
 		byHeight:         make([]chainhash.Hash, 0),
 		byHash:           make(map[chainhash.Hash]*chaintracks.BlockHeader),
-		network:          "main",
+		network:          networkMain,
 		localStoragePath: t.TempDir(),
 	}
 
@@ -529,7 +529,7 @@ func TestCDNBootstrapperContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	b := NewCDNBootstrapper(server.URL, "main")
+	b := NewCDNBootstrapper(server.URL, networkMain)
 	err := b.Bootstrap(ctx, cm)
 
 	assert.Error(t, err)

@@ -8,6 +8,14 @@ import (
 	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
 )
 
+// Network name constants used throughout the package.
+const (
+	networkMain        = "main"
+	networkTest        = "test"
+	networkTeratest    = "teratest"
+	networkTeratestnet = "teratestnet"
+)
+
 // Genesis block headers for each network (80 bytes each).
 //
 //nolint:gochecknoglobals // Genesis block data is constant and must be global
@@ -62,11 +70,11 @@ var (
 func getGenesisHeader(network string) (*block.Header, error) {
 	var data []byte
 	switch network {
-	case "main":
+	case networkMain:
 		data = genesisMainnet
-	case "test":
+	case networkTest:
 		data = genesisTestnet
-	case "teratest", "teratestnet":
+	case networkTeratest, networkTeratestnet:
 		data = genesisTeratestnet
 	default:
 		return nil, fmt.Errorf("%w: %s", chaintracks.ErrUnknownNetwork, network)
