@@ -6,7 +6,7 @@ require (
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.18
 	github.com/bsv-blockchain/go-sdk v1.2.23
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.5
-	github.com/bsv-blockchain/teranode v0.15.0-beta-9
+	github.com/bsv-blockchain/teranode v0.15.1-beta-2
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
 	github.com/spf13/viper v1.21.0
@@ -42,12 +42,12 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bsv-blockchain/go-bt/v2 v2.6.3 // indirect
-	github.com/bsv-blockchain/go-chaincfg v1.5.7 // indirect
+	github.com/bsv-blockchain/go-chaincfg v1.5.8 // indirect
 	github.com/bsv-blockchain/go-lockfree-queue v1.1.3 // indirect
-	github.com/bsv-blockchain/go-safe-conversion v1.1.3 // indirect
-	github.com/bsv-blockchain/go-subtree v1.3.1 // indirect
-	github.com/bsv-blockchain/go-tx-map v1.3.5 // indirect
-	github.com/bsv-blockchain/go-wire v1.2.3 // indirect
+	github.com/bsv-blockchain/go-safe-conversion v1.2.0 // indirect
+	github.com/bsv-blockchain/go-subtree v1.4.1 // indirect
+	github.com/bsv-blockchain/go-tx-map v1.3.7 // indirect
+	github.com/bsv-blockchain/go-wire v1.2.5 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
@@ -207,16 +207,16 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260428171046-76f71b9afea0 // indirect
-	golang.org/x/term v0.42.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/term v0.43.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.44.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
