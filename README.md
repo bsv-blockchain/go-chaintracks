@@ -138,7 +138,7 @@ go get -u github.com/bsv-blockchain/go-chaintracks
 import "github.com/bsv-blockchain/go-chaintracks/chaintracks"
 
 // Create chain manager with local storage
-// Network options: "main", "test", "teratest"
+// Network options: "main"/"mainnet", "test"/"testnet", "teratest"/"teratestnet", "regtest", "stn", "tstn"
 // Optional bootstrap URL for initial sync
 cm, err := chaintracks.NewChainManager("main", "~/.chaintracks", "https://node.example.com")
 if err != nil {
