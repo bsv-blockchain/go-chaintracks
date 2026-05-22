@@ -1,7 +1,6 @@
 package chainmanager
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/bsv-blockchain/go-chaincfg"
@@ -70,5 +69,5 @@ func TestGetGenesisHeader_AllChaincfgNetworks(t *testing.T) {
 func TestGetGenesisHeader_UnknownNetwork(t *testing.T) {
 	_, err := getGenesisHeader("nonsense")
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, chaintracks.ErrUnknownNetwork))
+	assert.ErrorIs(t, err, chaintracks.ErrUnknownNetwork)
 }
