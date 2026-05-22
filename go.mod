@@ -42,7 +42,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bsv-blockchain/go-bt/v2 v2.6.3 // indirect
-	github.com/bsv-blockchain/go-chaincfg v1.5.8 // indirect
+	github.com/bsv-blockchain/go-chaincfg v1.5.8
 	github.com/bsv-blockchain/go-lockfree-queue v1.1.3 // indirect
 	github.com/bsv-blockchain/go-safe-conversion v1.2.0 // indirect
 	github.com/bsv-blockchain/go-subtree v1.4.1 // indirect
