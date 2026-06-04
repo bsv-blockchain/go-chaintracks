@@ -6,7 +6,7 @@ require (
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.18
 	github.com/bsv-blockchain/go-sdk v1.2.23
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.5
-	github.com/bsv-blockchain/teranode v0.15.2-beta-2
+	github.com/bsv-blockchain/teranode v0.15.2-beta-7
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
 	github.com/spf13/viper v1.21.0
@@ -19,7 +19,6 @@ replace github.com/joho/godotenv => github.com/joho/godotenv v1.5.1
 replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.4.2
 
 require (
-	github.com/aerospike/aerospike-client-go/v8 v8.7.0 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.7 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
@@ -249,24 +248,19 @@ require (
 	filippo.io/keygen v0.0.0-20260114151900-8e2790ea4c5b // indirect
 	github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.1.22 // indirect
+	github.com/bsv-blockchain/aerospike-client-go/v8 v8.7.1-bsv3 // indirect
 	github.com/bsv-blockchain/go-batcher/v2 v2.0.1 // indirect
 	github.com/dgraph-io/badger/v4 v4.9.1 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.4.0 // indirect
 	github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 // indirect
-	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.9.2 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
-	github.com/moby/go-archive v0.2.0 // indirect
-	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/pion/turn/v5 v5.0.4 // indirect
 	github.com/seiflotfy/cuckoofilter v0.0.0-20240715131351-a2f2c23f1771 // indirect
-	github.com/shirou/gopsutil/v4 v4.26.3 // indirect
-	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/twmb/franz-go v1.21.2 // indirect
 	github.com/twmb/franz-go/pkg/kadm v1.18.0 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
