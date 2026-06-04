@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.18
-	github.com/bsv-blockchain/go-sdk v1.2.23
+	github.com/bsv-blockchain/go-sdk v1.2.24
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.5
 	github.com/bsv-blockchain/teranode v0.15.2-beta-2
 	github.com/gofiber/fiber/v2 v2.52.13
@@ -41,13 +41,13 @@ require (
 	github.com/aws/smithy-go v1.25.1 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bsv-blockchain/go-bt/v2 v2.6.4 // indirect
-	github.com/bsv-blockchain/go-chaincfg v1.5.8
+	github.com/bsv-blockchain/go-bt/v2 v2.6.5 // indirect
+	github.com/bsv-blockchain/go-chaincfg v1.5.9
 	github.com/bsv-blockchain/go-lockfree-queue v1.2.0 // indirect
 	github.com/bsv-blockchain/go-safe-conversion v1.2.0 // indirect
 	github.com/bsv-blockchain/go-subtree v1.4.2 // indirect
 	github.com/bsv-blockchain/go-tx-map v1.3.7 // indirect
-	github.com/bsv-blockchain/go-wire v1.2.6 // indirect
+	github.com/bsv-blockchain/go-wire v1.2.7 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
