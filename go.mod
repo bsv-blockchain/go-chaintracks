@@ -6,7 +6,7 @@ require (
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.19
 	github.com/bsv-blockchain/go-sdk v1.2.24
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.6
-	github.com/bsv-blockchain/teranode v0.15.2-beta-7
+	github.com/bsv-blockchain/teranode v0.15.2-beta-9
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
 	github.com/spf13/viper v1.21.0
@@ -249,7 +249,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.2.5 // indirect
 	github.com/bsv-blockchain/aerospike-client-go/v8 v8.7.1-bsv3 // indirect
-	github.com/bsv-blockchain/go-batcher/v2 v2.0.3 // indirect
+	github.com/bsv-blockchain/go-batcher/v2 v2.0.4 // indirect
 	github.com/dgraph-io/badger/v4 v4.9.1 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.4.0 // indirect
 	github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 // indirect
