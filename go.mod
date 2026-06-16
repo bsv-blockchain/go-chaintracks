@@ -3,9 +3,9 @@ module github.com/bsv-blockchain/go-chaintracks
 go 1.26.0
 
 require (
-	github.com/bsv-blockchain/go-p2p-message-bus v0.1.19
+	github.com/bsv-blockchain/go-p2p-message-bus v0.1.20
 	github.com/bsv-blockchain/go-sdk v1.2.24
-	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.6
+	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.7
 	github.com/bsv-blockchain/teranode v0.15.2-beta-9
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
@@ -213,7 +213,7 @@ require (
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260610154732-fb80ec83bdd9 // indirect
+	golang.org/x/telemetry v0.0.0-20260611141451-d61e87d5f4a3 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
