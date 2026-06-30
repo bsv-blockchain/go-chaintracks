@@ -16,7 +16,7 @@ require (
 
 replace github.com/joho/godotenv => github.com/joho/godotenv v1.5.1
 
-replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.4.2
+replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.5.0
 
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect
