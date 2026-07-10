@@ -49,7 +49,8 @@ func (h *DashboardHandler) HandleStatus(c *fiber.Ctx) error {
 	}
 	peerCount := len(peers)
 
-	html := fmt.Sprintf(`<!DOCTYPE html>
+	html := fmt.Sprintf(
+		`<!DOCTYPE html>
 <html>
 <head>
     <title>Chaintracks Status</title>
