@@ -4,14 +4,14 @@ go 1.26.3
 
 require (
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.22
-	github.com/bsv-blockchain/go-sdk v1.3.1
+	github.com/bsv-blockchain/go-sdk v1.3.2
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.8
 	github.com/bsv-blockchain/teranode v0.16.0-beta-9
 	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
-	github.com/valyala/fasthttp v1.72.0
+	github.com/valyala/fasthttp v1.73.0
 )
 
 replace github.com/joho/godotenv => github.com/joho/godotenv v1.5.1
