@@ -3,8 +3,8 @@ module github.com/bsv-blockchain/go-chaintracks
 go 1.26.3
 
 require (
-	github.com/bsv-blockchain/go-p2p-message-bus v0.1.23
-	github.com/bsv-blockchain/go-sdk v1.3.4
+	github.com/bsv-blockchain/go-p2p-message-bus v0.1.24
+	github.com/bsv-blockchain/go-sdk v1.4.1
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.2.9
 	github.com/bsv-blockchain/teranode v0.16.0-beta-9
 	github.com/gofiber/fiber/v2 v2.52.15
@@ -107,7 +107,7 @@ require (
 	github.com/libp2p/go-flow-metrics v0.3.0 // indirect
 	github.com/libp2p/go-libp2p v0.49.0 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.4.1 // indirect
-	github.com/libp2p/go-libp2p-kad-dht v0.42.1 // indirect
+	github.com/libp2p/go-libp2p-kad-dht v0.42.2 // indirect
 	github.com/libp2p/go-libp2p-kbucket v0.9.0 // indirect
 	github.com/libp2p/go-libp2p-pubsub v0.17.0 // indirect
 	github.com/libp2p/go-libp2p-record v0.3.1 // indirect
@@ -204,7 +204,7 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/exp v0.0.0-20260820122028-d6e0b57b1a69 // indirect
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
