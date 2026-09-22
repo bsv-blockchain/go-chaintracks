@@ -22,7 +22,7 @@ replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9
 
 require (
 	github.com/bsv-blockchain/go-chaincfg v1.7.0
-	github.com/bsv-blockchain/go-p2p-message-bus v0.1.25
+	github.com/bsv-blockchain/go-p2p-message-bus v0.1.26
 	github.com/bsv-blockchain/go-sdk v1.5.2
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.3.0
 	github.com/bsv-blockchain/teranode v0.16.0-beta-9
