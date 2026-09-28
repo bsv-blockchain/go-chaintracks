@@ -6,16 +6,6 @@ replace github.com/joho/godotenv => github.com/joho/godotenv v1.5.1
 
 replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.5.1
 
-// The three replaces below mirror go-teranode-p2p-client v0.3.0's own go.mod. A dependency's
-// replace directives are ignored by the main module, so they must be repeated here.
-//
-// go-teranode-p2p-client v0.3.0 pulls quic-go v0.62.0 / webtransport-go v0.13.0, but
-// go-libp2p v0.49.0 requires the older API (webtransport.Dialer). Pin down to the versions
-// libp2p v0.49.0 builds against; MVS cannot select these without a replace.
-replace github.com/quic-go/quic-go => github.com/quic-go/quic-go v0.60.0
-
-replace github.com/quic-go/webtransport-go => github.com/quic-go/webtransport-go v0.11.1
-
 // k8s.io/{api,apimachinery,client-go} v0.37.0 use structured-merge-diff/v6 via the older
 // kube-openapi; newer kube-openapi pulls structured-merge-diff/v7 and breaks apimachinery.
 replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
@@ -135,7 +125,7 @@ require (
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
 	github.com/libp2p/go-cidranger v1.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.3.0 // indirect
-	github.com/libp2p/go-libp2p v0.49.0 // indirect
+	github.com/libp2p/go-libp2p v0.50.0 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.4.1 // indirect
 	github.com/libp2p/go-libp2p-kad-dht v0.42.2 // indirect
 	github.com/libp2p/go-libp2p-kbucket v0.9.0 // indirect
@@ -203,7 +193,7 @@ require (
 	github.com/prometheus/common v0.71.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.62.0 // indirect; pinned: v0.61.0+ incompatible with go-libp2p v0.49.0 (webtransport.Dialer)
+	github.com/quic-go/quic-go v0.62.0 // indirect
 	github.com/quic-go/webtransport-go v0.13.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
