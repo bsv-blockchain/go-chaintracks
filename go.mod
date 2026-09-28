@@ -6,10 +6,6 @@ replace github.com/joho/godotenv => github.com/joho/godotenv v1.5.1
 
 replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.5.1
 
-// k8s.io/{api,apimachinery,client-go} v0.37.0 use structured-merge-diff/v6 via the older
-// kube-openapi; newer kube-openapi pulls structured-merge-diff/v7 and breaks apimachinery.
-replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
-
 require (
 	github.com/bsv-blockchain/go-chaincfg v1.7.0
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.28
@@ -263,7 +259,12 @@ require (
 	k8s.io/apimachinery v0.37.1 // indirect
 	k8s.io/client-go v0.37.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20260908163437-c4db2bdfbfe6 // indirect
+	// Keep kube-openapi at ...20260721 until k8s.io/apimachinery moves past v0.37:
+	// newer kube-openapi uses structured-merge-diff/v7, which v0.37 cannot build
+	// against. Go selects the highest version any module requires and ignores a
+	// dependency's replace directives, so requiring a newer one here breaks every
+	// module that imports this one.
+	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
 	modernc.org/libc v1.77.1 // indirect
