@@ -9,7 +9,7 @@ replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.5.1
 require (
 	github.com/bsv-blockchain/go-chaincfg v1.7.0
 	github.com/bsv-blockchain/go-p2p-message-bus v0.1.28
-	github.com/bsv-blockchain/go-sdk v1.7.0
+	github.com/bsv-blockchain/go-sdk v1.7.1
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.3.1
 	github.com/bsv-blockchain/teranode v0.16.0-beta-9
 	github.com/gofiber/fiber/v2 v2.52.15
