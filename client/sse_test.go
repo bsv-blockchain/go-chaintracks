@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -28,20 +29,32 @@ func newFastClient(url string) *Client {
 }
 
 func tipAt(height uint32) *chaintracks.BlockHeader {
+	var hash chainhash.Hash
+	binary.LittleEndian.PutUint32(hash[:], height)
+
 	return &chaintracks.BlockHeader{
 		Header: &block.Header{},
 		Height: height,
-		Hash:   chainhash.Hash{byte(height)},
+		Hash:   hash,
 	}
+}
+
+// writeEvent sends v as one SSE data event. It is called from HTTP handler
+// goroutines, so it must use assert (not require) to avoid FailNow off the test goroutine.
+func writeEvent(t *testing.T, w http.ResponseWriter, v any) {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if !assert.NoError(t, err) {
+		return
+	}
+	_, err = fmt.Fprintf(w, "data: %s\n\n", data)
+	assert.NoError(t, err)
+	w.(http.Flusher).Flush()
 }
 
 func writeTip(t *testing.T, w http.ResponseWriter, tip *chaintracks.BlockHeader) {
 	t.Helper()
-	data, err := json.Marshal(tip)
-	require.NoError(t, err)
-	_, err = fmt.Fprintf(w, "data: %s\n\n", data)
-	require.NoError(t, err)
-	w.(http.Flusher).Flush()
+	writeEvent(t, w, tip)
 }
 
 func startStream(w http.ResponseWriter) {
@@ -62,11 +75,11 @@ func waitForTip(t *testing.T, ch <-chan *chaintracks.BlockHeader, height uint32)
 }
 
 func TestSubscribeReconnectsWhenServerClosesStream(t *testing.T) {
-	var connections atomic.Int32
+	var connections atomic.Uint32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n := connections.Add(1)
 		startStream(w)
-		writeTip(t, w, tipAt(uint32(n)))
+		writeTip(t, w, tipAt(n))
 		if n == 1 {
 			return // drop the first connection
 		}
@@ -180,11 +193,7 @@ func TestSubscribeReorgReconnects(t *testing.T) {
 			return
 		}
 		startStream(w)
-		data, err := json.Marshal(chaintracks.ReorgEvent{Depth: 1, NewTip: tipAt(10)})
-		require.NoError(t, err)
-		_, err = fmt.Fprintf(w, "data: %s\n\n", data)
-		require.NoError(t, err)
-		w.(http.Flusher).Flush()
+		writeEvent(t, w, chaintracks.ReorgEvent{Depth: 1, NewTip: tipAt(10)})
 		<-r.Context().Done()
 	}))
 	defer server.Close()

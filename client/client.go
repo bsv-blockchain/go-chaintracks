@@ -69,7 +69,7 @@ func (c *Client) Subscribe(ctx context.Context) <-chan *chaintracks.BlockHeader 
 	c.subMu.Lock()
 	c.subscribers[ch] = struct{}{}
 	if len(c.subscribers) == 1 {
-		c.startSSE()
+		c.startSSE(ctx)
 	}
 	c.subMu.Unlock()
 
@@ -90,7 +90,7 @@ func (c *Client) SubscribeReorg(ctx context.Context) <-chan *chaintracks.ReorgEv
 	c.reorgSubMu.Lock()
 	c.reorgSubscribers[ch] = struct{}{}
 	if len(c.reorgSubscribers) == 1 {
-		c.startReorgSSE()
+		c.startReorgSSE(ctx)
 	}
 	c.reorgSubMu.Unlock()
 
@@ -141,11 +141,12 @@ func (c *Client) UnsubscribeReorg(ch <-chan *chaintracks.ReorgEvent) {
 }
 
 // startSSE starts the SSE connection and fan-out goroutine. Must be called with subMu held.
-// The stream has its own context, independent of any subscriber's, and is only
-// canceled by stopSSE when the last subscriber leaves.
-func (c *Client) startSSE() {
+// The stream inherits parentCtx's values but not its cancellation, so one subscriber
+// leaving cannot kill the stream for the others. It is only canceled by stopSSE
+// when the last subscriber leaves.
+func (c *Client) startSSE(parentCtx context.Context) {
 	msgChan := make(chan *chaintracks.BlockHeader, 1)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parentCtx))
 	c.msgChan = msgChan
 	c.sseCancel = cancel
 
@@ -154,11 +155,12 @@ func (c *Client) startSSE() {
 }
 
 // startReorgSSE starts the reorg SSE connection and fan-out goroutine. Must be called with reorgSubMu held.
-// The stream has its own context, independent of any subscriber's, and is only
-// canceled by stopReorgSSE when the last subscriber leaves.
-func (c *Client) startReorgSSE() {
+// The stream inherits parentCtx's values but not its cancellation, so one subscriber
+// leaving cannot kill the stream for the others. It is only canceled by stopReorgSSE
+// when the last subscriber leaves.
+func (c *Client) startReorgSSE(parentCtx context.Context) {
 	msgChan := make(chan *chaintracks.ReorgEvent, 1)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parentCtx))
 	c.reorgMsgChan = msgChan
 	c.reorgSSECancel = cancel
 
