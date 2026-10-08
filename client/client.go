@@ -2,7 +2,6 @@
 package client
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bsv-blockchain/go-sdk/block"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
@@ -37,6 +37,10 @@ type Client struct {
 	reorgSSECancel   context.CancelFunc
 	reorgSubscribers map[chan *chaintracks.ReorgEvent]struct{}
 	reorgSubMu       sync.Mutex
+
+	// SSE reconnect backoff bounds
+	minBackoff time.Duration
+	maxBackoff time.Duration
 }
 
 // New creates a new HTTP client for chaintracks server.
@@ -51,22 +55,23 @@ func New(baseURL string) *Client {
 		httpClient:       &http.Client{},
 		subscribers:      make(map[chan *chaintracks.BlockHeader]struct{}),
 		reorgSubscribers: make(map[chan *chaintracks.ReorgEvent]struct{}),
+		minBackoff:       defaultMinBackoff,
+		maxBackoff:       defaultMaxBackoff,
 	}
 }
 
 // Subscribe returns a channel that receives tip updates.
-// Starts SSE connection on first subscriber. When ctx is canceled, the subscription is removed.
+// Starts the SSE connection on first subscriber and keeps it alive, reconnecting on failure,
+// until the last subscriber leaves. When ctx is canceled, the subscription is removed.
 func (c *Client) Subscribe(ctx context.Context) <-chan *chaintracks.BlockHeader {
 	ch := make(chan *chaintracks.BlockHeader, 1)
 
 	c.subMu.Lock()
 	c.subscribers[ch] = struct{}{}
-	firstSubscriber := len(c.subscribers) == 1
-	c.subMu.Unlock()
-
-	if firstSubscriber {
+	if len(c.subscribers) == 1 {
 		c.startSSE(ctx)
 	}
+	c.subMu.Unlock()
 
 	go func() {
 		<-ctx.Done()
@@ -77,18 +82,17 @@ func (c *Client) Subscribe(ctx context.Context) <-chan *chaintracks.BlockHeader 
 }
 
 // SubscribeReorg returns a channel that receives reorg events.
-// Starts reorg SSE connection on first subscriber. When ctx is canceled, the subscription is removed.
+// Starts the reorg SSE connection on first subscriber and keeps it alive, reconnecting on failure,
+// until the last subscriber leaves. When ctx is canceled, the subscription is removed.
 func (c *Client) SubscribeReorg(ctx context.Context) <-chan *chaintracks.ReorgEvent {
 	ch := make(chan *chaintracks.ReorgEvent, 1)
 
 	c.reorgSubMu.Lock()
 	c.reorgSubscribers[ch] = struct{}{}
-	firstSubscriber := len(c.reorgSubscribers) == 1
-	c.reorgSubMu.Unlock()
-
-	if firstSubscriber {
+	if len(c.reorgSubscribers) == 1 {
 		c.startReorgSSE(ctx)
 	}
+	c.reorgSubMu.Unlock()
 
 	go func() {
 		<-ctx.Done()
@@ -136,24 +140,32 @@ func (c *Client) UnsubscribeReorg(ch <-chan *chaintracks.ReorgEvent) {
 	}
 }
 
-// startSSE starts the SSE connection and fan-out goroutine.
+// startSSE starts the SSE connection and fan-out goroutine. Must be called with subMu held.
+// The stream inherits parentCtx's values but not its cancellation, so one subscriber
+// leaving cannot kill the stream for the others. It is only canceled by stopSSE
+// when the last subscriber leaves.
 func (c *Client) startSSE(parentCtx context.Context) {
-	c.msgChan = make(chan *chaintracks.BlockHeader, 1)
-	ctx, cancel := context.WithCancel(parentCtx)
+	msgChan := make(chan *chaintracks.BlockHeader, 1)
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parentCtx))
+	c.msgChan = msgChan
 	c.sseCancel = cancel
 
-	go c.runSSE(ctx)
-	go c.fanOut(ctx)
+	go c.runSSE(ctx, msgChan)
+	go c.fanOut(ctx, msgChan)
 }
 
-// startReorgSSE starts the reorg SSE connection and fan-out goroutine.
+// startReorgSSE starts the reorg SSE connection and fan-out goroutine. Must be called with reorgSubMu held.
+// The stream inherits parentCtx's values but not its cancellation, so one subscriber
+// leaving cannot kill the stream for the others. It is only canceled by stopReorgSSE
+// when the last subscriber leaves.
 func (c *Client) startReorgSSE(parentCtx context.Context) {
-	c.reorgMsgChan = make(chan *chaintracks.ReorgEvent, 1)
-	ctx, cancel := context.WithCancel(parentCtx)
+	msgChan := make(chan *chaintracks.ReorgEvent, 1)
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parentCtx))
+	c.reorgMsgChan = msgChan
 	c.reorgSSECancel = cancel
 
-	go c.runReorgSSE(ctx)
-	go c.reorgFanOut(ctx)
+	go c.runReorgSSE(ctx, msgChan)
+	go c.reorgFanOut(ctx, msgChan)
 }
 
 // stopSSE stops the SSE connection and clears the tip cache.
@@ -177,12 +189,12 @@ func (c *Client) stopReorgSSE() {
 }
 
 // fanOut reads from msgChan and broadcasts to all subscribers.
-func (c *Client) fanOut(ctx context.Context) {
+func (c *Client) fanOut(ctx context.Context, msgChan <-chan *chaintracks.BlockHeader) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case header, ok := <-c.msgChan:
+		case header, ok := <-msgChan:
 			if !ok {
 				return
 			}
@@ -191,13 +203,13 @@ func (c *Client) fanOut(ctx context.Context) {
 	}
 }
 
-// reorgFanOut reads from reorgMsgChan and broadcasts to all subscribers.
-func (c *Client) reorgFanOut(ctx context.Context) {
+// reorgFanOut reads from msgChan and broadcasts to all subscribers.
+func (c *Client) reorgFanOut(ctx context.Context, msgChan <-chan *chaintracks.ReorgEvent) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case reorgEvent, ok := <-c.reorgMsgChan:
+		case reorgEvent, ok := <-msgChan:
 			if !ok {
 				return
 			}
@@ -206,156 +218,60 @@ func (c *Client) reorgFanOut(ctx context.Context) {
 	}
 }
 
-// connectSSE establishes an SSE connection to the given path and returns the response body.
-// Returns nil if the connection fails.
-func (c *Client) connectSSE(ctx context.Context, path string) io.ReadCloser {
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+path, nil)
-	if err != nil {
-		return nil
-	}
+// runSSE keeps the tip stream connected, reconnecting on failure, and forwards
+// new tips to msgChan until ctx is canceled.
+func (c *Client) runSSE(ctx context.Context, msgChan chan<- *chaintracks.BlockHeader) {
+	defer close(msgChan)
 
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Connection", "keep-alive")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		return nil
-	}
-
-	return resp.Body
-}
-
-// runSSE connects to the SSE stream and reads events.
-func (c *Client) runSSE(ctx context.Context) {
-	defer close(c.msgChan)
-
-	body := c.connectSSE(ctx, "/v2/tip/stream")
-	if body == nil {
-		return
-	}
-
-	c.readSSE(ctx, body)
-}
-
-// runReorgSSE connects to the reorg SSE stream and reads events.
-func (c *Client) runReorgSSE(ctx context.Context) {
-	defer close(c.reorgMsgChan)
-
-	body := c.connectSSE(ctx, "/v2/reorg/stream")
-	if body == nil {
-		return
-	}
-
-	c.readReorgSSE(ctx, body)
-}
-
-// readSSE reads Server-Sent Events from the response body.
-//
-//nolint:gocyclo // Inherent complexity of SSE parsing logic
-func (c *Client) readSSE(ctx context.Context, body io.ReadCloser) {
-	defer func() { _ = body.Close() }()
-
-	reader := bufio.NewReader(body)
+	// lastHash survives reconnects so the tip the server resends on connect is not delivered twice.
 	var lastHash *chainhash.Hash
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return
-		}
-
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "" {
-			continue
-		}
-
+	c.runStream(ctx, "/v2/tip/stream", func(data string) {
 		var blockHeader chaintracks.BlockHeader
 		if err := json.Unmarshal([]byte(data), &blockHeader); err != nil {
-			continue
+			return
 		}
 
 		if lastHash != nil && lastHash.IsEqual(&blockHeader.Hash) {
-			continue
+			return
 		}
-
 		lastHash = &blockHeader.Hash
+
+		if ctx.Err() != nil {
+			return
+		}
 
 		c.tipMu.Lock()
 		c.currentTip = &blockHeader
 		c.tipMu.Unlock()
 
 		select {
-		case c.msgChan <- &blockHeader:
-		case <-ctx.Done():
-			return
+		case msgChan <- &blockHeader:
 		default:
 		}
-	}
+	})
 }
 
-// readReorgSSE reads Server-Sent Events from the response body.
-//
-// Inherent complexity of SSE parsing logic
-func (c *Client) readReorgSSE(ctx context.Context, body io.ReadCloser) {
-	defer func() { _ = body.Close() }()
+// runReorgSSE keeps the reorg stream connected, reconnecting on failure, and
+// forwards reorg events to msgChan until ctx is canceled.
+func (c *Client) runReorgSSE(ctx context.Context, msgChan chan<- *chaintracks.ReorgEvent) {
+	defer close(msgChan)
 
-	reader := bufio.NewReader(body)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return
-		}
-
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "" {
-			continue
-		}
-
+	c.runStream(ctx, "/v2/reorg/stream", func(data string) {
 		var reorgEvent chaintracks.ReorgEvent
 		if err := json.Unmarshal([]byte(data), &reorgEvent); err != nil {
-			continue
+			return
 		}
 
 		if reorgEvent.NewTip == nil {
-			continue
+			return
 		}
 
 		select {
-		case c.reorgMsgChan <- &reorgEvent:
-		case <-ctx.Done():
-			return
+		case msgChan <- &reorgEvent:
 		default:
 		}
-	}
+	})
 }
 
 // broadcast sends a tip update to all subscribers.
