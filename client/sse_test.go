@@ -40,15 +40,19 @@ func tipAt(height uint32) *chaintracks.BlockHeader {
 }
 
 // writeEvent sends v as one SSE data event. It is called from HTTP handler
-// goroutines, so it must use assert (not require) to avoid FailNow off the test goroutine.
+// goroutines, so it reports failures with t.Errorf: require would call FailNow off
+// the test goroutine, and testifylint rejects assert for error checks.
 func writeEvent(t *testing.T, w http.ResponseWriter, v any) {
 	t.Helper()
 	data, err := json.Marshal(v)
-	if !assert.NoError(t, err) {
+	if err != nil {
+		t.Errorf("marshal event: %v", err)
 		return
 	}
-	_, err = fmt.Fprintf(w, "data: %s\n\n", data)
-	assert.NoError(t, err)
+	if _, err = fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+		t.Errorf("write event: %v", err)
+		return
+	}
 	w.(http.Flusher).Flush()
 }
 
