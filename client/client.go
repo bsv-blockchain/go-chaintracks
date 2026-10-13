@@ -41,23 +41,48 @@ type Client struct {
 	// SSE reconnect backoff bounds
 	minBackoff time.Duration
 	maxBackoff time.Duration
+
+	// SSE idle timeout: a stream with no line (event or keepalive) for this long is reconnected
+	idleTimeout time.Duration
+}
+
+// Option configures a Client.
+type Option func(*Client)
+
+// WithIdleTimeout sets how long an SSE stream may go without receiving any line,
+// including ": keepalive" comments, before it is closed and reconnected.
+// The server sends a keepalive every 15s, so the default of 45s allows three misses.
+// Non-positive values are ignored.
+func WithIdleTimeout(d time.Duration) Option {
+	return func(c *Client) {
+		if d > 0 {
+			c.idleTimeout = d
+		}
+	}
 }
 
 // New creates a new HTTP client for chaintracks server.
-func New(baseURL string) *Client {
+func New(baseURL string, opts ...Option) *Client {
 	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
 		baseURL = "http://" + baseURL
 	}
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
-	return &Client{
+	c := &Client{
 		baseURL:          baseURL,
 		httpClient:       &http.Client{},
 		subscribers:      make(map[chan *chaintracks.BlockHeader]struct{}),
 		reorgSubscribers: make(map[chan *chaintracks.ReorgEvent]struct{}),
 		minBackoff:       defaultMinBackoff,
 		maxBackoff:       defaultMaxBackoff,
+		idleTimeout:      defaultIdleTimeout,
 	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c
 }
 
 // Subscribe returns a channel that receives tip updates.

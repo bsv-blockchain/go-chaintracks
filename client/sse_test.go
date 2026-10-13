@@ -216,6 +216,71 @@ func TestSubscribeReorgReconnects(t *testing.T) {
 	}
 }
 
+func TestSubscribeReconnectsWhenStreamGoesIdle(t *testing.T) {
+	var connections atomic.Uint32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := connections.Add(1)
+		startStream(w)
+		writeTip(t, w, tipAt(n))
+		// Stall: keep the TCP connection open but never write again.
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	client := newFastClient(server.URL)
+	client.idleTimeout = 100 * time.Millisecond
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	ch := client.Subscribe(ctx)
+	waitForTip(t, ch, 1)
+	waitForTip(t, ch, 2) // only possible after the idle timeout forced a reconnect
+	assert.GreaterOrEqual(t, connections.Load(), uint32(2))
+}
+
+func TestKeepalivesPreventIdleTimeout(t *testing.T) {
+	var connections atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		connections.Add(1)
+		startStream(w)
+		writeTip(t, w, tipAt(1))
+
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-ticker.C:
+				if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
+					return
+				}
+				w.(http.Flusher).Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	client := newFastClient(server.URL)
+	client.idleTimeout = 100 * time.Millisecond
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	ch := client.Subscribe(ctx)
+	waitForTip(t, ch, 1)
+
+	// Several idle timeouts' worth of keepalive-only traffic must not trigger a reconnect.
+	time.Sleep(500 * time.Millisecond)
+	assert.Equal(t, int32(1), connections.Load(), "keepalives should keep the stream alive")
+}
+
+func TestWithIdleTimeout(t *testing.T) {
+	assert.Equal(t, defaultIdleTimeout, New("localhost:1").idleTimeout)
+	assert.Equal(t, 5*time.Second, New("localhost:1", WithIdleTimeout(5*time.Second)).idleTimeout)
+	assert.Equal(t, defaultIdleTimeout, New("localhost:1", WithIdleTimeout(0)).idleTimeout, "non-positive ignored")
+	assert.Equal(t, defaultIdleTimeout, (&Client{}).idleTimeoutOrDefault(), "zero-value client falls back")
+}
+
 func TestJitter(t *testing.T) {
 	for range 100 {
 		d := jitter(time.Second)
