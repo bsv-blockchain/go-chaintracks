@@ -3,12 +3,14 @@ package client
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/bsv-blockchain/go-chaintracks/chaintracks"
@@ -18,8 +20,14 @@ const (
 	defaultMinBackoff = time.Second
 	defaultMaxBackoff = 30 * time.Second
 
+	// defaultIdleTimeout is three missed server keepalives (sent every 15s).
+	defaultIdleTimeout = 45 * time.Second
+
 	sseDataPrefix = "data: "
 )
+
+// errIdleTimeout is returned when a stream receives no line within the idle timeout.
+var errIdleTimeout = errors.New("stream idle timeout")
 
 // runStream keeps an SSE stream at path connected until ctx is canceled.
 // onData is called with the payload of every non-empty "data: " line.
@@ -60,8 +68,21 @@ func (c *Client) backoffBounds() (minBackoff, maxBackoff time.Duration) {
 	return minBackoff, maxBackoff
 }
 
-// streamOnce opens one SSE connection and reads it until it fails or ctx is canceled.
-// onActivity is called for every event and keepalive received.
+// idleTimeoutOrDefault returns the configured idle timeout, falling back to the
+// default so a zero-value Client still detects stalled streams.
+func (c *Client) idleTimeoutOrDefault() time.Duration {
+	if c.idleTimeout <= 0 {
+		return defaultIdleTimeout
+	}
+	return c.idleTimeout
+}
+
+// streamOnce opens one SSE connection and reads it until it fails, goes idle or ctx is canceled.
+// Any line, including ": keepalive" comments, counts as proof of life. If none arrives within
+// the idle timeout the body is closed, which unblocks the read and returns errIdleTimeout.
+// http.Client.Timeout is deliberately not used: it limits the whole request and would cut
+// off healthy long-lived streams.
+// onActivity is called for every non-empty line received.
 func (c *Client) streamOnce(ctx context.Context, path string, onData func(string), onActivity func()) error {
 	body, err := c.connectSSE(ctx, path)
 	if err != nil {
@@ -69,12 +90,24 @@ func (c *Client) streamOnce(ctx context.Context, path string, onData func(string
 	}
 	defer func() { _ = body.Close() }()
 
+	idle := c.idleTimeoutOrDefault()
+	var timedOut atomic.Bool
+	timer := time.AfterFunc(idle, func() {
+		timedOut.Store(true)
+		_ = body.Close()
+	})
+	defer timer.Stop()
+
 	reader := bufio.NewReader(body)
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
+			if timedOut.Load() {
+				return fmt.Errorf("%w: no data for %v", errIdleTimeout, idle)
+			}
 			return fmt.Errorf("stream read failed: %w", err)
 		}
+		timer.Reset(idle)
 
 		line = strings.TrimSpace(line)
 		if line == "" {
