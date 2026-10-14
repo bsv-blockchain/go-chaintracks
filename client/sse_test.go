@@ -274,6 +274,81 @@ func TestKeepalivesPreventIdleTimeout(t *testing.T) {
 	assert.Equal(t, int32(1), connections.Load(), "keepalives should keep the stream alive")
 }
 
+// newTipServer serves /v2/tip/stream via stream and /v2/tip with a fixed REST tip.
+func newTipServer(t *testing.T, restHeight uint32, stream http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v2/tip/stream", stream)
+	mux.HandleFunc("/v2/tip", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(tipAt(restHeight))
+	})
+	return httptest.NewServer(mux)
+}
+
+func TestGetTipFallsBackToRESTWhileStreamDown(t *testing.T) {
+	const restHeight = 500
+	var connections atomic.Int32
+	server := newTipServer(t, restHeight, func(w http.ResponseWriter, _ *http.Request) {
+		if connections.Add(1) > 1 {
+			w.WriteHeader(http.StatusServiceUnavailable) // stream stays down
+			return
+		}
+		startStream(w)
+		writeTip(t, w, tipAt(1))
+		// first connection drops here
+	})
+	defer server.Close()
+
+	client := newFastClient(server.URL)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	ch := client.Subscribe(ctx)
+	waitForTip(t, ch, 1)
+
+	// Once the stream is down the stale cached tip (1) must not be served.
+	require.Eventually(t, func() bool {
+		tip := client.GetTip(ctx)
+		return tip != nil && tip.Height == restHeight
+	}, sseTestTimeout, 5*time.Millisecond, "GetTip should fall back to REST while the stream is down")
+
+	height, err := client.CurrentHeight(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(restHeight), height)
+}
+
+func TestGetTipCacheRepopulatedAfterReconnectWithSameTip(t *testing.T) {
+	const restHeight = 500
+	var connections atomic.Int32
+	server := newTipServer(t, restHeight, func(w http.ResponseWriter, r *http.Request) {
+		n := connections.Add(1)
+		startStream(w)
+		writeTip(t, w, tipAt(1)) // the server resends the same current tip on every connect
+		if n == 1 {
+			return // drop the first connection
+		}
+		<-r.Context().Done()
+	})
+	defer server.Close()
+
+	client := newFastClient(server.URL)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	ch := client.Subscribe(ctx)
+	waitForTip(t, ch, 1)
+
+	require.Eventually(t, func() bool { return connections.Load() >= 2 }, sseTestTimeout, 5*time.Millisecond)
+
+	// The deduped tip is not broadcast again, but it must still repopulate the cache
+	// that was cleared on disconnect; otherwise GetTip would keep hitting REST (500).
+	require.Eventually(t, func() bool {
+		tip := client.GetTip(ctx)
+		return tip != nil && tip.Height == 1
+	}, sseTestTimeout, 5*time.Millisecond, "cache should be repopulated from the resent tip")
+}
+
 func TestWithIdleTimeout(t *testing.T) {
 	assert.Equal(t, defaultIdleTimeout, New("localhost:1").idleTimeout)
 	assert.Equal(t, 5*time.Second, New("localhost:1", WithIdleTimeout(5*time.Second)).idleTimeout)

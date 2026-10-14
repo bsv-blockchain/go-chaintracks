@@ -200,9 +200,7 @@ func (c *Client) stopSSE() {
 		c.sseCancel = nil
 	}
 
-	c.tipMu.Lock()
-	c.currentTip = nil
-	c.tipMu.Unlock()
+	c.clearTip()
 }
 
 // stopReorgSSE stops the reorg SSE connection.
@@ -257,24 +255,34 @@ func (c *Client) runSSE(ctx context.Context, msgChan chan<- *chaintracks.BlockHe
 			return
 		}
 
+		if ctx.Err() != nil {
+			return
+		}
+
+		// Always refresh the cache, even for a tip we already delivered: it is cleared on
+		// disconnect, and the server resends the current tip on reconnect.
+		c.tipMu.Lock()
+		c.currentTip = &blockHeader
+		c.tipMu.Unlock()
+
 		if lastHash != nil && lastHash.IsEqual(&blockHeader.Hash) {
 			return
 		}
 		lastHash = &blockHeader.Hash
 
-		if ctx.Err() != nil {
-			return
-		}
-
-		c.tipMu.Lock()
-		c.currentTip = &blockHeader
-		c.tipMu.Unlock()
-
 		select {
 		case msgChan <- &blockHeader:
 		default:
 		}
-	})
+	}, c.clearTip)
+}
+
+// clearTip drops the cached tip so GetTip falls back to REST instead of serving
+// a stale value while the stream is down.
+func (c *Client) clearTip() {
+	c.tipMu.Lock()
+	c.currentTip = nil
+	c.tipMu.Unlock()
 }
 
 // runReorgSSE keeps the reorg stream connected, reconnecting on failure, and
@@ -296,7 +304,7 @@ func (c *Client) runReorgSSE(ctx context.Context, msgChan chan<- *chaintracks.Re
 		case msgChan <- &reorgEvent:
 		default:
 		}
-	})
+	}, nil)
 }
 
 // broadcast sends a tip update to all subscribers.

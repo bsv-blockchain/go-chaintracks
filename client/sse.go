@@ -34,7 +34,10 @@ var errIdleTimeout = errors.New("stream idle timeout")
 // After a connect failure, a non-200 response or a read error it reconnects
 // with exponential backoff and jitter. The backoff resets once the server
 // sends an event or a keepalive.
-func (c *Client) runStream(ctx context.Context, path string, onData func(data string)) {
+// onDisconnect, if non-nil, is called each time a connection ends (but not on
+// cancellation), before the reconnect delay, so callers can invalidate state
+// derived from the stream.
+func (c *Client) runStream(ctx context.Context, path string, onData func(data string), onDisconnect func()) {
 	minBackoff, maxBackoff := c.backoffBounds()
 	backoff := minBackoff
 
@@ -42,6 +45,10 @@ func (c *Client) runStream(ctx context.Context, path string, onData func(data st
 		err := c.streamOnce(ctx, path, onData, func() { backoff = minBackoff })
 		if ctx.Err() != nil {
 			return
+		}
+
+		if onDisconnect != nil {
+			onDisconnect()
 		}
 
 		delay := jitter(backoff)
