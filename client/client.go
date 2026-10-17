@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -44,10 +45,25 @@ type Client struct {
 
 	// SSE idle timeout: a stream with no line (event or keepalive) for this long is reconnected
 	idleTimeout time.Duration
+
+	// Logger for stream connect failures, drops and recoveries; nil discards
+	logger *slog.Logger
+
+	// Exposed connection health of each SSE stream
+	tipStream   streamState
+	reorgStream streamState
 }
 
 // Option configures a Client.
 type Option func(*Client)
+
+// WithLogger sets the logger used to report SSE stream connect failures, drops, idle
+// timeouts and recoveries. By default nothing is logged. A nil logger discards logs.
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *Client) {
+		c.logger = logger
+	}
+}
 
 // WithIdleTimeout sets how long an SSE stream may go without receiving any line,
 // including ": keepalive" comments, before it is closed and reconnected.
@@ -249,32 +265,37 @@ func (c *Client) runSSE(ctx context.Context, msgChan chan<- *chaintracks.BlockHe
 	// lastHash survives reconnects so the tip the server resends on connect is not delivered twice.
 	var lastHash *chainhash.Hash
 
-	c.runStream(ctx, "/v2/tip/stream", func(data string) {
-		var blockHeader chaintracks.BlockHeader
-		if err := json.Unmarshal([]byte(data), &blockHeader); err != nil {
-			return
-		}
+	c.runStream(ctx, streamSpec{
+		path:  "/v2/tip/stream",
+		state: &c.tipStream,
+		onData: func(data string) {
+			var blockHeader chaintracks.BlockHeader
+			if err := json.Unmarshal([]byte(data), &blockHeader); err != nil {
+				return
+			}
 
-		if ctx.Err() != nil {
-			return
-		}
+			if ctx.Err() != nil {
+				return
+			}
 
-		// Always refresh the cache, even for a tip we already delivered: it is cleared on
-		// disconnect, and the server resends the current tip on reconnect.
-		c.tipMu.Lock()
-		c.currentTip = &blockHeader
-		c.tipMu.Unlock()
+			// Always refresh the cache, even for a tip we already delivered: it is cleared on
+			// disconnect, and the server resends the current tip on reconnect.
+			c.tipMu.Lock()
+			c.currentTip = &blockHeader
+			c.tipMu.Unlock()
 
-		if lastHash != nil && lastHash.IsEqual(&blockHeader.Hash) {
-			return
-		}
-		lastHash = &blockHeader.Hash
+			if lastHash != nil && lastHash.IsEqual(&blockHeader.Hash) {
+				return
+			}
+			lastHash = &blockHeader.Hash
 
-		select {
-		case msgChan <- &blockHeader:
-		default:
-		}
-	}, c.clearTip)
+			select {
+			case msgChan <- &blockHeader:
+			default:
+			}
+		},
+		onDisconnect: c.clearTip,
+	})
 }
 
 // clearTip drops the cached tip so GetTip falls back to REST instead of serving
@@ -290,21 +311,25 @@ func (c *Client) clearTip() {
 func (c *Client) runReorgSSE(ctx context.Context, msgChan chan<- *chaintracks.ReorgEvent) {
 	defer close(msgChan)
 
-	c.runStream(ctx, "/v2/reorg/stream", func(data string) {
-		var reorgEvent chaintracks.ReorgEvent
-		if err := json.Unmarshal([]byte(data), &reorgEvent); err != nil {
-			return
-		}
+	c.runStream(ctx, streamSpec{
+		path:  "/v2/reorg/stream",
+		state: &c.reorgStream,
+		onData: func(data string) {
+			var reorgEvent chaintracks.ReorgEvent
+			if err := json.Unmarshal([]byte(data), &reorgEvent); err != nil {
+				return
+			}
 
-		if reorgEvent.NewTip == nil {
-			return
-		}
+			if reorgEvent.NewTip == nil {
+				return
+			}
 
-		select {
-		case msgChan <- &reorgEvent:
-		default:
-		}
-	}, nil)
+			select {
+			case msgChan <- &reorgEvent:
+			default:
+			}
+		},
+	})
 }
 
 // broadcast sends a tip update to all subscribers.
