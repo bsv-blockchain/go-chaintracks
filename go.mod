@@ -16,7 +16,7 @@ require (
 	github.com/bsv-blockchain/go-p2p-message-bus v0.2.0
 	github.com/bsv-blockchain/go-sdk v1.7.2
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.3.2
-	github.com/bsv-blockchain/teranode v0.16.1-beta-1
+	github.com/bsv-blockchain/teranode v0.16.1-beta-txmeta-2
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/joho/godotenv v1.6.0-pre.2 // replaced with v1.5.1: v1.6.0-pre.2 has known issues
 	github.com/spf13/viper v1.21.0
@@ -54,7 +54,7 @@ require (
 	github.com/bsv-blockchain/go-bt/v2 v2.7.4 // indirect
 	github.com/bsv-blockchain/go-lockfree-queue v1.2.0 // indirect
 	github.com/bsv-blockchain/go-safe-conversion v1.2.0 // indirect
-	github.com/bsv-blockchain/go-subtree v1.6.0 // indirect
+	github.com/bsv-blockchain/go-subtree v1.6.1 // indirect
 	github.com/bsv-blockchain/go-tx-map v1.5.0 // indirect
 	github.com/bsv-blockchain/go-wire v1.4.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -236,7 +236,7 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20261007192929-f45ad48fbe92 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
