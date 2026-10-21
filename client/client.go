@@ -26,7 +26,6 @@ type Client struct {
 	// SSE state
 	currentTip *chaintracks.BlockHeader
 	tipMu      sync.RWMutex
-	msgChan    chan *chaintracks.BlockHeader
 	sseCancel  context.CancelFunc
 
 	// Subscriber fan-out
@@ -34,7 +33,6 @@ type Client struct {
 	subMu       sync.Mutex
 
 	// Reorg SSE state
-	reorgMsgChan     chan *chaintracks.ReorgEvent
 	reorgSSECancel   context.CancelFunc
 	reorgSubscribers map[chan *chaintracks.ReorgEvent]struct{}
 	reorgSubMu       sync.Mutex
@@ -188,7 +186,6 @@ func (c *Client) UnsubscribeReorg(ch <-chan *chaintracks.ReorgEvent) {
 func (c *Client) startSSE(parentCtx context.Context) {
 	msgChan := make(chan *chaintracks.BlockHeader, 1)
 	ctx, cancel := context.WithCancel(context.WithoutCancel(parentCtx))
-	c.msgChan = msgChan
 	c.sseCancel = cancel
 
 	go c.runSSE(ctx, msgChan)
@@ -202,7 +199,6 @@ func (c *Client) startSSE(parentCtx context.Context) {
 func (c *Client) startReorgSSE(parentCtx context.Context) {
 	msgChan := make(chan *chaintracks.ReorgEvent, 1)
 	ctx, cancel := context.WithCancel(context.WithoutCancel(parentCtx))
-	c.reorgMsgChan = msgChan
 	c.reorgSSECancel = cancel
 
 	go c.runReorgSSE(ctx, msgChan)
@@ -237,7 +233,7 @@ func (c *Client) fanOut(ctx context.Context, msgChan <-chan *chaintracks.BlockHe
 			if !ok {
 				return
 			}
-			c.broadcast(header)
+			c.broadcast(ctx, header)
 		}
 	}
 }
@@ -252,7 +248,7 @@ func (c *Client) reorgFanOut(ctx context.Context, msgChan <-chan *chaintracks.Re
 			if !ok {
 				return
 			}
-			c.reorgBroadcast(reorgEvent)
+			c.reorgBroadcast(ctx, reorgEvent)
 		}
 	}
 }
@@ -274,15 +270,11 @@ func (c *Client) runSSE(ctx context.Context, msgChan chan<- *chaintracks.BlockHe
 				return
 			}
 
-			if ctx.Err() != nil {
-				return
-			}
-
 			// Always refresh the cache, even for a tip we already delivered: it is cleared on
 			// disconnect, and the server resends the current tip on reconnect.
-			c.tipMu.Lock()
-			c.currentTip = &blockHeader
-			c.tipMu.Unlock()
+			if !c.cacheTip(ctx, &blockHeader) {
+				return
+			}
 
 			if lastHash != nil && lastHash.IsEqual(&blockHeader.Hash) {
 				return
@@ -294,8 +286,23 @@ func (c *Client) runSSE(ctx context.Context, msgChan chan<- *chaintracks.BlockHe
 			default:
 			}
 		},
-		onDisconnect: c.clearTip,
+		onDisconnect: func() { c.clearTipIfLive(ctx) },
 	})
+}
+
+// cacheTip stores header as the current tip unless the run that produced it has been
+// stopped. The ctx check happens under tipMu, and stopSSE cancels ctx before clearTip
+// takes tipMu, so a stopped run can never repopulate the cache after it was cleared.
+func (c *Client) cacheTip(ctx context.Context, header *chaintracks.BlockHeader) bool {
+	c.tipMu.Lock()
+	defer c.tipMu.Unlock()
+
+	if ctx.Err() != nil {
+		return false
+	}
+	c.currentTip = header
+
+	return true
 }
 
 // clearTip drops the cached tip so GetTip falls back to REST instead of serving
@@ -304,6 +311,18 @@ func (c *Client) clearTip() {
 	c.tipMu.Lock()
 	c.currentTip = nil
 	c.tipMu.Unlock()
+}
+
+// clearTipIfLive is clearTip on behalf of a run, skipped if that run was stopped. After
+// stopSSE the cache belongs to stopSSE's own clear or to a restarted stream, and a late
+// clear from the old run must not wipe a tip the new run just cached.
+func (c *Client) clearTipIfLive(ctx context.Context) {
+	c.tipMu.Lock()
+	defer c.tipMu.Unlock()
+
+	if ctx.Err() == nil {
+		c.currentTip = nil
+	}
 }
 
 // runReorgSSE keeps the reorg stream connected, reconnecting on failure, and
@@ -332,10 +351,15 @@ func (c *Client) runReorgSSE(ctx context.Context, msgChan chan<- *chaintracks.Re
 	})
 }
 
-// broadcast sends a tip update to all subscribers.
-func (c *Client) broadcast(header *chaintracks.BlockHeader) {
+// broadcast sends a tip update to all subscribers, unless the run that produced it has
+// been stopped. stopSSE cancels ctx under subMu, so checking it here, under the same
+// lock, keeps a stopped run's leftover tip from reaching subscribers of a restarted stream.
+func (c *Client) broadcast(ctx context.Context, header *chaintracks.BlockHeader) {
 	c.subMu.Lock()
 	defer c.subMu.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
 	for ch := range c.subscribers {
 		select {
 		case ch <- header:
@@ -344,10 +368,14 @@ func (c *Client) broadcast(header *chaintracks.BlockHeader) {
 	}
 }
 
-// reorgBroadcast sends a reorg eventto all subscribers.
-func (c *Client) reorgBroadcast(reorgEvent *chaintracks.ReorgEvent) {
+// reorgBroadcast sends a reorg event to all subscribers, unless the run that produced it
+// has been stopped. See broadcast.
+func (c *Client) reorgBroadcast(ctx context.Context, reorgEvent *chaintracks.ReorgEvent) {
 	c.reorgSubMu.Lock()
 	defer c.reorgSubMu.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
 	for ch := range c.reorgSubscribers {
 		select {
 		case ch <- reorgEvent:
