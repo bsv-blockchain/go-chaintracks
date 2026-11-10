@@ -13,8 +13,8 @@ replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9
 
 require (
 	github.com/bsv-blockchain/go-chaincfg v1.7.0
-	github.com/bsv-blockchain/go-p2p-message-bus v0.2.0
-	github.com/bsv-blockchain/go-sdk v1.7.3
+	github.com/bsv-blockchain/go-p2p-message-bus v0.3.0
+	github.com/bsv-blockchain/go-sdk v1.7.4
 	github.com/bsv-blockchain/go-teranode-p2p-client v0.3.3
 	github.com/bsv-blockchain/teranode v0.16.1-beta-txmeta-2
 	github.com/gofiber/fiber/v2 v2.52.16
@@ -234,7 +234,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/mod v0.42.0 // indirect
